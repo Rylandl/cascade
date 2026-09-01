@@ -8,8 +8,9 @@ from cascade.initialization import (
     zero_state,
 )
 from cascade.integration import repeat_control, rk4_step, rollout
+from cascade.math import matvec, quaternion_rotate
 from cascade.reference import aerobatic_reference
-from cascade.state import ControlInput
+from cascade.state import ControlInput, Environment
 
 
 def test_rk4_preserves_unit_quaternion():
@@ -72,3 +73,32 @@ def test_equilibration_initializes_post_stall_and_actuator_states():
     assert jnp.all(state.aero.separation[:3] > 0.99)
     assert state.actuators.propeller_speed[0] > 0.0
     assert state.actuators.surface_deflection[2] != 0.0
+
+
+def test_torque_free_tumble_conserves_angular_momentum_and_energy():
+    model = aerobatic_reference()
+    vacuum = Environment(density=jnp.array(0.0), wind=jnp.zeros(3), gravity=jnp.zeros(3))
+    state = zero_state(model)
+    # Spin mostly about the intermediate inertia axis so the body tumbles instead of spinning
+    # steadily. This exercises the quaternion kinematics and Euler's equation together.
+    state = state._replace(
+        rigid_body=state.rigid_body._replace(angular_velocity=jnp.array([0.1, 6.0, 0.1]))
+    )
+    controls = repeat_control(zero_control(model), steps=10_000)
+
+    final, _ = jax.jit(rollout)(model, state, controls, vacuum, 0.001)
+
+    def angular_momentum_world(value):
+        body = matvec(model.inertia, value.rigid_body.angular_velocity)
+        return quaternion_rotate(value.rigid_body.attitude, body)
+
+    def rotational_energy(value):
+        rate = value.rigid_body.angular_velocity
+        return 0.5 * rate @ matvec(model.inertia, rate)
+
+    initial_momentum = angular_momentum_world(state)
+    momentum_error = jnp.linalg.norm(angular_momentum_world(final) - initial_momentum)
+    assert momentum_error / jnp.linalg.norm(initial_momentum) < 1e-5
+    energy_error = jnp.abs(rotational_energy(final) - rotational_energy(state))
+    assert energy_error / rotational_energy(state) < 1e-5
+    assert jnp.allclose(jnp.linalg.norm(final.rigid_body.attitude), 1.0, atol=1e-6)

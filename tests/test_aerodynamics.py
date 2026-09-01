@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import pytest
 
 from cascade.aerodynamics import (
     aerodynamic_coefficients,
@@ -7,10 +8,11 @@ from cascade.aerodynamics import (
     separation_derivative,
     surface_air_data,
 )
+from cascade.analysis import aerodynamic_sweep
 from cascade.initialization import standard_environment, zero_state
 from cascade.math import quaternion_rotate_inverse
 from cascade.reference import aerobatic_reference
-from cascade.state import ActuatorState, AeroState
+from cascade.state import ActuatorState, AeroState, ControlInput
 
 
 def test_separated_flat_plate_coefficients_cover_full_envelope():
@@ -89,3 +91,22 @@ def test_spanwise_flow_produces_opposing_crossflow_drag():
     )
 
     assert result.force_body[1] < 0.0
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="control surfaces rotate the whole panel, so large aileron stalls the wing half; "
+    "the schema v2 flap model fixes this",
+)
+def test_roll_moment_is_monotonic_in_aileron_command():
+    model = aerobatic_reference()
+    aileron = jnp.linspace(0.0, 1.0, 11)
+    control = ControlInput(
+        propeller=jnp.zeros((11, 1)),
+        channel=jnp.stack((aileron, jnp.zeros(11), jnp.zeros(11)), axis=-1),
+    )
+    sweep = aerodynamic_sweep(
+        model, jnp.full((11,), jnp.deg2rad(5.0)), airspeed_m_s=12.0, control=control
+    )
+
+    assert jnp.all(jnp.diff(sweep.moment_coefficient_body[:, 0]) > 0.0)
