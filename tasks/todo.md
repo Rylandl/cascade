@@ -20,7 +20,7 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 ## Phase 2: canonical conversion, plant, environment sequences
 - [x] `cascade/canonical.py` with tests (no Glassbox import)
 - [x] `rollout(environments=...)` time-major path with tests
-- [ ] `cascade/plant.py` with tests; exports; README and architecture doc; commit
+- [x] `cascade/plant.py` with tests; exports; README and architecture doc; commit
 
 ## Phase 3: Skywalker X8 spec from the published model
 - [ ] `aircraft/skywalker_x8.toml` with provenance; loader; propeller fit script and residual

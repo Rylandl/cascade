@@ -32,6 +32,7 @@ from cascade.model import (
     broadcast_model,
     validate_model,
 )
+from cascade.plant import Plant, PlantConfig, PlantSample
 from cascade.reference import aerobatic_reference, aerobatic_reference_spec
 from cascade.spec import (
     AircraftSpec,
@@ -61,6 +62,9 @@ __all__ = [
     "Environment",
     "LateralCoefficientSpec",
     "LongitudinalCoefficientSpec",
+    "Plant",
+    "PlantConfig",
+    "PlantSample",
     "PropellerModel",
     "PropellerSpec",
     "SpecError",

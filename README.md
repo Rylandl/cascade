@@ -62,6 +62,10 @@ controls = cascade.repeat_control(control, steps=100)
 final_state, trajectory = jax.jit(cascade.rollout)(model, state, controls, environment, 0.01)
 ```
 
+`cascade.Plant` wraps the same core as a stepped hidden plant for identification tooling: reset to
+a canonical state, hold one command per control interval, read back commanded and applied
+actuation.
+
 Run `uv run python examples/high_alpha.py` for a post-stall rollout differentiated with respect to
 the elevator command. Run `uv run python examples/trim_envelope.py` to trace conventional and
 high-alpha equilibrium branches and linearize a trim point.
