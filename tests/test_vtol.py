@@ -104,3 +104,26 @@ def test_hover_guidance_is_batched_and_differentiable():
     gradient = jax.grad(cost)(jnp.asarray(2.0))
     assert jnp.isfinite(gradient)
     assert hover_throttle(model, jnp.asarray(0.0), jnp.asarray(1.225)).shape == (2,)
+
+
+def test_velocity_ramp_schedule_holds_then_reaches_cruise_consistently():
+    from cascade.vtol import velocity_ramp_schedule
+
+    schedule = velocity_ramp_schedule(
+        400,
+        0.01,
+        start_position_ned=jnp.array([0.0, 0.0, -1.5]),
+        heading_rad=jnp.array(0.0),
+        cruise_speed_m_s=jnp.array(7.0),
+        acceleration_m_s2=jnp.array(3.5),
+        hold_steps=100,
+    )
+
+    assert schedule.position_ned.shape == (400, 3)
+    assert jnp.allclose(schedule.velocity_ned[:100], 0.0)
+    assert jnp.allclose(schedule.position_ned[:100], jnp.array([0.0, 0.0, -1.5]))
+    # Cruise speed is reached after 2 s of ramp and held; position is its integral.
+    assert jnp.allclose(schedule.velocity_ned[-1], jnp.array([7.0, 0.0, 0.0]))
+    finite_difference = jnp.diff(schedule.position_ned[:, 0]) / 0.01
+    assert jnp.allclose(finite_difference[150:], schedule.velocity_ned[151:, 0], atol=0.05)
+    assert jnp.allclose(schedule.azimuth_rad, 0.0)

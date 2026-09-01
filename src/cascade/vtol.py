@@ -119,3 +119,43 @@ def hover_guidance(
     thrust_total = model.mass * jnp.sum(specific_force * direction, axis=-1)
     throttle = hover_throttle(model, thrust_total, environment.density)
     return attitude, throttle
+
+
+def velocity_ramp_schedule(
+    steps: int,
+    dt: float,
+    *,
+    start_position_ned: Array,
+    heading_rad: Array,
+    cruise_speed_m_s: Array,
+    acceleration_m_s2: Array,
+    hold_steps: int = 0,
+) -> HoverSetpoint:
+    """Time-major hover setpoints that hold, then accelerate along a heading to cruise speed.
+
+    Velocity ramps linearly at ``acceleration_m_s2`` after ``hold_steps`` and saturates at
+    ``cruise_speed_m_s``; position is the integral of that velocity from the start point, and
+    the wing's belly faces the heading throughout. This is the setpoint side of a hover-to-cruise
+    transition; the guidance law decides how far to tilt to follow it.
+    """
+
+    time = jnp.arange(steps) * dt
+    ramp_time = jnp.maximum(time - hold_steps * dt, 0.0)
+    speed = jnp.minimum(acceleration_m_s2 * ramp_time, cruise_speed_m_s)
+    # Distance along the heading: integral of the saturating ramp.
+    ramp_end = cruise_speed_m_s / acceleration_m_s2
+    distance = jnp.where(
+        ramp_time < ramp_end,
+        0.5 * acceleration_m_s2 * ramp_time**2,
+        0.5 * cruise_speed_m_s * ramp_end + cruise_speed_m_s * (ramp_time - ramp_end),
+    )
+    along = jnp.stack(
+        (jnp.cos(heading_rad), jnp.sin(heading_rad), jnp.zeros_like(heading_rad)), axis=-1
+    )
+    position = start_position_ned + distance[:, None] * along
+    velocity = speed[:, None] * along
+    return HoverSetpoint(
+        position_ned=position,
+        velocity_ned=velocity,
+        azimuth_rad=jnp.broadcast_to(heading_rad, (steps,)),
+    )

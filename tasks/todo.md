@@ -75,3 +75,4 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
 - [x] 6b `aircraft/tailsitter_reference.toml`: washed/clean panels, hover balance, zero-airspeed
       authority, transition corridor with both trim branches (docs/tailsitter.md)
 - [ ] 6c transition example: hover -> cruise -> hover under the cascade, differentiated end to end
+      (hover guidance `cascade.vtol` and the velocity-ramp schedule are in; composition waits on 6a)
