@@ -14,6 +14,7 @@ from cascade.state import AeroState, AircraftState, Environment
 class PropulsionResult(NamedTuple):
     force_body: Array
     moment_body: Array
+    thrust: Array
     force_per_propeller: Array
     induced_velocity: Array
 
@@ -36,36 +37,71 @@ class AerodynamicResult(NamedTuple):
 
 
 def deflected_surface_frames(model: AircraftModel, deflection: Array) -> Array:
-    """Return body-from-surface rotations after physical surface deflection."""
+    """Return body-from-surface rotations after physical surface deflection.
 
-    deflection_rotation = rotation_y(deflection)
+    Only the all-moving share of a deflection rotates the surface frame. The flap share changes
+    the attached-flow coefficients instead, see :func:`aerodynamic_coefficients`.
+    """
+
+    deflection_rotation = rotation_y(model.surfaces.all_moving_fraction * deflection)
     return jnp.einsum(
         "...sij,...sjk->...sik", model.surfaces.body_from_surface, deflection_rotation
     )
 
 
-def propulsion(model: AircraftModel, propeller_speed: Array, density: Array) -> PropulsionResult:
-    """Calculate propeller wrench and static induced slipstream velocity."""
+def propulsion(
+    model: AircraftModel,
+    state: AircraftState,
+    environment: Environment,
+    air_velocity_body: Array,
+) -> PropulsionResult:
+    """Calculate propeller wrench and momentum-theory induced velocity with axial inflow.
+
+    Thrust follows ``T = rho n^2 D^4 C_T0 (1 - J / J_0)`` with advance ratio ``J = V_a / (n D)``
+    written without dividing by ``n``, so it is exactly zero for a stopped propeller and turns
+    into windmilling drag beyond the zero-thrust advance ratio. The induced velocity is the
+    momentum-theory wake increment with axial inflow; ``validate_model`` bounds ``C_T0`` so its
+    discriminant is a sum of squares and the result stays finite and differentiable everywhere.
+    """
 
     propellers = model.propellers
-    speed_squared = jnp.square(jnp.maximum(propeller_speed, 0.0))
-    thrust = propellers.thrust_coefficient * speed_squared
+    revolutions = jnp.maximum(state.actuators.propeller_speed, 0.0) / (2.0 * jnp.pi)
+    diameter = propellers.diameter
+    rotational_velocity = jnp.cross(
+        state.rigid_body.angular_velocity[..., None, :], propellers.position, axis=-1
+    )
+    local_velocity = air_velocity_body[..., None, :] + rotational_velocity
+    axial_speed = jnp.sum(local_velocity * propellers.direction, axis=-1)
+
+    tip_advance = revolutions * diameter
+    thrust_per_density = (
+        propellers.thrust_coefficient
+        * jnp.square(diameter)
+        * tip_advance
+        * (tip_advance - axial_speed / propellers.zero_thrust_advance_ratio)
+    )
+    density = environment.density[..., None]
+    thrust = density * thrust_per_density
+    torque = density * jnp.square(revolutions) * diameter**5 * propellers.torque_coefficient
     force_per_propeller = thrust[..., None] * propellers.direction
 
     arm_moment = jnp.cross(propellers.position, force_per_propeller, axis=-1)
-    reaction_moment = (-propellers.spin_direction * propellers.torque_coefficient * speed_squared)[
-        ..., None
-    ] * propellers.direction
-
+    reaction_moment = (-propellers.spin_direction * torque)[..., None] * propellers.direction
     force_body = jnp.sum(force_per_propeller, axis=-2)
     moment_body = jnp.sum(arm_moment + reaction_moment, axis=-2)
-    induced_speed_squared = jnp.maximum(thrust, 0.0) / (
-        2.0 * density[..., None] * propellers.disk_area + 1e-8
-    )
-    induced_velocity = jnp.sqrt(induced_speed_squared + 1e-8) - 1e-4
+
+    # Momentum theory ``v_i (|V_a| + v_i) = T / (2 rho A)`` solved by the cancellation-free root
+    # ``2k / (sqrt(V_a^2 + 4k) + |V_a|)``: exactly zero at zero thrust, ``sqrt(k)`` in hover,
+    # negative when windmilling, and treated symmetrically in reverse flow where momentum
+    # theory has no valid branch anyway.
+    disk_area = 0.25 * jnp.pi * jnp.square(diameter)
+    momentum = thrust_per_density / (2.0 * disk_area)
+    root = jnp.sqrt(jnp.maximum(jnp.square(axial_speed) + 4.0 * momentum, 0.0) + 1e-12)
+    induced_velocity = 2.0 * momentum / (root + smooth_abs(axial_speed) + 1e-6)
     return PropulsionResult(
         force_body=force_body,
         moment_body=moment_body,
+        thrust=thrust,
         force_per_propeller=force_per_propeller,
         induced_velocity=induced_velocity,
     )
@@ -134,29 +170,45 @@ def surface_air_data(
 
 
 def aerodynamic_coefficients(
-    model: AircraftModel, aero_state: AeroState, angle_of_attack: Array
+    model: AircraftModel, aero_state: AeroState, angle_of_attack: Array, deflection: Array
 ) -> tuple[Array, Array, Array]:
-    """Blend attached and flat-plate coefficients over the full angular envelope."""
+    """Blend attached and flat-plate coefficients over the full angular envelope.
+
+    ``deflection`` is the physical surface angle. Its flap share shifts both the attached lift
+    curve and the separated flat-plate incidence by ``flap_effectiveness`` times the angle, and
+    adds intrinsic pitching-moment and profile-drag increments to attached flow only. The
+    all-moving share has already rotated the frame and therefore ``angle_of_attack``.
+    """
 
     surfaces = model.surfaces
+    flap_deflection = (1.0 - surfaces.all_moving_fraction) * deflection
     # The attached approximation cannot diverge when its lag state is stale during a violent
     # maneuver. It is softly bounded and forcibly faded beyond twice the static stall angle.
     attached_angle_limit = 3.0 * surfaces.stall_angle
     attached_angle = attached_angle_limit * jnp.tanh(angle_of_attack / attached_angle_limit)
-    lift_attached = surfaces.lift_coefficient_zero + surfaces.lift_curve_slope * attached_angle
-    drag_attached = surfaces.drag_coefficient_zero + surfaces.induced_drag_factor * jnp.square(
-        lift_attached
+    effective_angle = attached_angle + surfaces.flap_effectiveness * flap_deflection
+    lift_attached = surfaces.lift_coefficient_zero + surfaces.lift_curve_slope * effective_angle
+    drag_attached = (
+        surfaces.drag_coefficient_zero
+        + surfaces.induced_drag_factor * jnp.square(lift_attached)
+        + surfaces.drag_coefficient_flap * jnp.square(flap_deflection)
     )
     moment_attached = (
-        surfaces.moment_coefficient_zero + surfaces.moment_coefficient_alpha * attached_angle
+        surfaces.moment_coefficient_zero
+        + surfaces.moment_coefficient_alpha * attached_angle
+        + surfaces.moment_coefficient_flap * flap_deflection
     )
 
-    sine, cosine = jnp.sin(angle_of_attack), jnp.cos(angle_of_attack)
+    # A deflected flap on a separated surface still rotates the plate's mean line, so the same
+    # effectiveness shifts the flat-plate incidence. This is what gives stalled ailerons and
+    # elevators their remaining authority in post-stall and prop-hanging flight.
+    separated_angle = angle_of_attack + surfaces.flap_effectiveness * flap_deflection
+    sine, cosine = jnp.sin(separated_angle), jnp.cos(separated_angle)
     absolute_sine = smooth_abs(sine)
     normal = surfaces.normal_force_coefficient * sine * absolute_sine
     lift_separated = normal * cosine
     drag_separated = (
-        surfaces.normal_force_coefficient * absolute_sine** 3
+        surfaces.normal_force_coefficient * absolute_sine**3
         + surfaces.edge_drag_coefficient * jnp.square(cosine)
     )
     moment_separated = jnp.zeros_like(moment_attached)
@@ -185,7 +237,7 @@ def aerodynamics(
     surfaces = model.surfaces
     air, frames = surface_air_data(model, state, environment, air_velocity_body, induced_velocity)
     lift_coefficient, drag_coefficient, moment_coefficient = aerodynamic_coefficients(
-        model, state.aero, air.angle_of_attack
+        model, state.aero, air.angle_of_attack, state.actuators.surface_deflection
     )
 
     lift = air.dynamic_pressure * surfaces.area * lift_coefficient

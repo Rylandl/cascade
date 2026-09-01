@@ -16,7 +16,7 @@ from cascade.model import (
     validate_model,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class SpecError(ValueError):
@@ -47,6 +47,10 @@ class SurfaceSpec:
     span_drag_coefficient: float
     separation_time_constant_s: float
     reattachment_time_constant_s: float
+    all_moving_fraction: float
+    flap_effectiveness: float
+    moment_coefficient_flap_rad: float
+    drag_coefficient_flap_rad2: float
     control_map_rad: tuple[float, ...]
     actuator_bias_rad: float
     actuator_limit_rad: float
@@ -73,9 +77,10 @@ class PropellerSpec:
     name: str
     position_m: tuple[float, float, float]
     direction_body: tuple[float, float, float]
-    disk_area_m2: float
-    thrust_coefficient_n_s2_rad2: float
-    torque_coefficient_nm_s2_rad2: float
+    diameter_m: float
+    thrust_coefficient_static: float
+    zero_thrust_advance_ratio: float
+    torque_coefficient_static: float
     spin_direction: float
     slipstream_weights: tuple[float, ...]
     speed_min_rad_s: float
@@ -185,6 +190,14 @@ class AircraftSpec:
             reattachment_time_constant=jnp.asarray(
                 [surface.reattachment_time_constant_s for surface in surfaces]
             ),
+            all_moving_fraction=jnp.asarray([surface.all_moving_fraction for surface in surfaces]),
+            flap_effectiveness=jnp.asarray([surface.flap_effectiveness for surface in surfaces]),
+            moment_coefficient_flap=jnp.asarray(
+                [surface.moment_coefficient_flap_rad for surface in surfaces]
+            ),
+            drag_coefficient_flap=jnp.asarray(
+                [surface.drag_coefficient_flap_rad2 for surface in surfaces]
+            ),
         )
         propeller_model = PropellerModel(
             position=jnp.asarray([propeller.position_m for propeller in propellers]).reshape(
@@ -193,12 +206,15 @@ class AircraftSpec:
             direction=jnp.asarray([propeller.direction_body for propeller in propellers]).reshape(
                 n_propeller, 3
             ),
-            disk_area=jnp.asarray([propeller.disk_area_m2 for propeller in propellers]),
+            diameter=jnp.asarray([propeller.diameter_m for propeller in propellers]),
             thrust_coefficient=jnp.asarray(
-                [propeller.thrust_coefficient_n_s2_rad2 for propeller in propellers]
+                [propeller.thrust_coefficient_static for propeller in propellers]
+            ),
+            zero_thrust_advance_ratio=jnp.asarray(
+                [propeller.zero_thrust_advance_ratio for propeller in propellers]
             ),
             torque_coefficient=jnp.asarray(
-                [propeller.torque_coefficient_nm_s2_rad2 for propeller in propellers]
+                [propeller.torque_coefficient_static for propeller in propellers]
             ),
             spin_direction=jnp.asarray([propeller.spin_direction for propeller in propellers]),
             slipstream_map=jnp.asarray(

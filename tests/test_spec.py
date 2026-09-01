@@ -42,3 +42,9 @@ def test_aircraft_spec_rejects_duplicate_names():
 
     with pytest.raises(SpecError, match="control channel names must be unique"):
         duplicate_channels.validate()
+
+
+def test_schema_version_one_is_rejected():
+    spec = aerobatic_reference_spec()
+    with pytest.raises(SpecError, match="unsupported schema version 1"):
+        replace(spec, schema_version=1).validate()

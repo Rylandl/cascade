@@ -111,9 +111,8 @@ def test_model_parameters_can_vary_per_world():
             propeller_speed=jnp.full((3, 1), 600.0),
         )
     )
-    environment = Environment(
-        density=jnp.zeros(3), wind=jnp.zeros((3, 3)), gravity=jnp.zeros((3, 3))
-    )
+    # Thrust scales with density, so this needs real air; lighter worlds accelerate faster.
+    environment = standard_environment(batch_shape=(3,))
     result = jax.jit(evaluate_dynamics)(
         model, state, zero_control(model, batch_shape=(3,)), environment
     )

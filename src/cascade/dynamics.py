@@ -47,7 +47,7 @@ def evaluate_dynamics(
     air_velocity_world = rigid_body.velocity - environment.wind
     air_velocity_body = quaternion_rotate_inverse(rigid_body.attitude, air_velocity_world)
 
-    propeller_result = propulsion(model, state.actuators.propeller_speed, environment.density)
+    propeller_result = propulsion(model, state, environment, air_velocity_body)
     aerodynamic_result = aerodynamics(
         model,
         state,

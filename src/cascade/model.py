@@ -9,7 +9,12 @@ from jax import Array
 
 
 class SurfaceModel(NamedTuple):
-    """Geometry and full-envelope coefficients for ``S`` aerodynamic elements."""
+    """Geometry and full-envelope coefficients for ``S`` aerodynamic elements.
+
+    A surface with zero area contributes no force and exists only to carry a physical, lagged,
+    limited actuator, for example the elevons of an aircraft modelled by a whole-aircraft
+    coefficient block.
+    """
 
     position: Array
     body_from_surface: Array
@@ -28,15 +33,25 @@ class SurfaceModel(NamedTuple):
     span_drag_coefficient: Array
     separation_time_constant: Array
     reattachment_time_constant: Array
+    all_moving_fraction: Array
+    flap_effectiveness: Array
+    moment_coefficient_flap: Array
+    drag_coefficient_flap: Array
 
 
 class PropellerModel(NamedTuple):
-    """Geometry and low-order propulsion parameters for ``P`` propellers."""
+    """Geometry and advance-ratio thrust parameters for ``P`` propellers.
+
+    ``thrust_coefficient`` is the static ``C_T = T / (rho n^2 D^4)`` and ``torque_coefficient``
+    the static ``C_Q = Q / (rho n^2 D^5)`` with ``n`` in revolutions per second. Thrust falls
+    linearly with advance ratio and reaches zero at ``zero_thrust_advance_ratio``.
+    """
 
     position: Array
     direction: Array
-    disk_area: Array
+    diameter: Array
     thrust_coefficient: Array
+    zero_thrust_advance_ratio: Array
     torque_coefficient: Array
     spin_direction: Array
     slipstream_map: Array
@@ -73,7 +88,7 @@ class AircraftModel(NamedTuple):
 
     @property
     def n_propellers(self) -> int:
-        return self.propellers.disk_area.shape[-1]
+        return self.propellers.diameter.shape[-1]
 
     @property
     def n_control_channels(self) -> int:
@@ -101,7 +116,7 @@ def validate_model(model: AircraftModel) -> AircraftModel:
 
     surfaces, propellers, actuators = model.surfaces, model.propellers, model.actuators
     n_surface = surfaces.area.shape[-1]
-    n_propeller = propellers.disk_area.shape[-1]
+    n_propeller = propellers.diameter.shape[-1]
 
     surface_vectors = {
         "position": (n_surface, 3),
@@ -145,18 +160,37 @@ def validate_model(model: AircraftModel) -> AircraftModel:
         for value in (model.reference_area, model.reference_chord, model.reference_span)
     ):
         raise ValueError("reference area, chord, and span must be positive")
-    if np.any(np.asarray(surfaces.area) <= 0) or np.any(np.asarray(surfaces.chord) <= 0):
-        raise ValueError("surface area and chord must be positive")
+    if np.any(np.asarray(surfaces.area) < 0):
+        raise ValueError("surface areas must be non-negative")
+    if np.any(np.asarray(surfaces.chord) <= 0):
+        raise ValueError("surface chords must be positive")
     if np.any(np.asarray(surfaces.stall_width) <= 0):
         raise ValueError("stall widths must be positive")
     if np.any(np.asarray(surfaces.separation_time_constant) <= 0):
         raise ValueError("separation time constants must be positive")
     if np.any(np.asarray(surfaces.reattachment_time_constant) <= 0):
         raise ValueError("reattachment time constants must be positive")
-    if np.any(np.asarray(propellers.disk_area) <= 0):
-        raise ValueError("propeller disk areas must be positive")
+    all_moving = np.asarray(surfaces.all_moving_fraction)
+    if np.any(all_moving < 0) or np.any(all_moving > 1):
+        raise ValueError("all-moving fractions must lie in [0, 1]")
+    if np.any(np.asarray(surfaces.flap_effectiveness) < 0):
+        raise ValueError("flap effectiveness must be non-negative")
+    if np.any(np.asarray(surfaces.drag_coefficient_flap) < 0):
+        raise ValueError("flap drag coefficients must be non-negative")
+    if np.any(np.asarray(propellers.diameter) <= 0):
+        raise ValueError("propeller diameters must be positive")
     if np.any(np.asarray(propellers.thrust_coefficient) < 0):
         raise ValueError("propeller thrust coefficients must be non-negative")
+    if np.any(np.asarray(propellers.zero_thrust_advance_ratio) <= 0):
+        raise ValueError("zero-thrust advance ratios must be positive")
+    if np.any(np.asarray(propellers.torque_coefficient) < 0):
+        raise ValueError("propeller torque coefficients must be non-negative")
+    momentum_bound = 0.5 * np.pi * np.square(np.asarray(propellers.zero_thrust_advance_ratio))
+    if np.any(np.asarray(propellers.thrust_coefficient) > momentum_bound):
+        raise ValueError(
+            "propeller thrust coefficient exceeds the momentum-theory bound "
+            "(pi / 2) * zero_thrust_advance_ratio**2"
+        )
     if np.any(np.asarray(propellers.slipstream_map) < 0):
         raise ValueError("slipstream weights must be non-negative")
     if np.any(np.asarray(actuators.surface_limit) < 0):

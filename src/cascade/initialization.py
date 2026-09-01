@@ -101,7 +101,7 @@ def equilibrate_internal_state(
     state = state._replace(actuators=actuators)
     air_velocity_world = state.rigid_body.velocity - environment.wind
     air_velocity_body = quaternion_rotate_inverse(state.rigid_body.attitude, air_velocity_world)
-    propeller_result = propulsion(model, actuators.propeller_speed, environment.density)
+    propeller_result = propulsion(model, state, environment, air_velocity_body)
     air, _ = surface_air_data(
         model,
         state,
