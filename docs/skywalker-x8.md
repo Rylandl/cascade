@@ -187,3 +187,17 @@ damping, lift-due-to-pitch-rate, side-force-due-to-yaw-rate) come through with t
 the right order of magnitude; the two derivatives that depend on a fin's real height above the roll
 axis and its precise three-dimensional lift slope — both of which this single-strip-per-panel model
 approximates crudely — do not.
+
+
+## Against flight
+
+Both models were replayed against the NTNU X8 flight campaign through Glassbox's rolling-window
+protocol (Glassbox `docs/cascade-x8-validation.md`, 2026-09-01). At the same documented-uncertainty
+variant (CG 50 mm forward, 4 kg, twice the pendulum inertia, half the campaign's inferred vertical
+wind) the coefficient table scores 0.677 of kinematic persistence and the panel model 0.675, so
+statics fitted to the table plus rate derivatives from geometry predict flight as well as the
+published derivatives do. One-step residual regressions split that: the panel model halves the
+roll-moment residual (2.0 against 3.4 N m rms) with its aileron and dihedral terms matching flight,
+while its geometric pitch damping of −2.6 overstates the flying wing's weak pitch damping more than
+XFLR5's −1.3 does. The next question for this model is what layout or unsteady term gives a
+tailless wing its measured pitch damping.
