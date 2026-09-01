@@ -139,8 +139,9 @@ name = "nose_propeller"
 position_m = [0.28, 0.0, 0.0]
 direction_body = [1.0, 0.0, 0.0]
 diameter_m = 0.28
-thrust_coefficient_static = 0.152
-zero_thrust_advance_ratio = 0.6
+# Rows multiply n and n^2 (rev/s); columns multiply (V_a / D)^0, ^1, ^2. This is the linear
+# C_T(J) = 0.152 (1 - J / 0.6): static thrust 23.5 N at 900 rad/s, zero thrust at J = 0.6.
+thrust_map = [[0.0, -0.25333, 0.0], [0.152, 0.0, 0.0]]
 torque_coefficient_static = 0.0094
 spin_direction = 1.0
 # Weights multiply the induced velocity at the propeller disk. The tails sit in the developed

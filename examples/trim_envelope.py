@@ -29,9 +29,9 @@ def main() -> None:
         environment,
     )
 
-    # Decision order is roll, pitch, propeller commands, then aileron/elevator/rudder. A high-alpha
-    # seed intentionally selects the post-stall solution branch of this non-convex problem.
-    post_stall_seed = jnp.array([0.0, np.deg2rad(75.0), 0.7, 0.0, -0.85, 0.0])
+    # Decision order is roll, pitch, yaw offset, propeller commands, then aileron/elevator/rudder.
+    # A high-alpha seed intentionally selects the post-stall branch of this non-convex problem.
+    post_stall_seed = jnp.array([0.0, np.deg2rad(75.0), 0.0, 0.7, 0.0, -0.85, 0.0])
     post_stall = cascade.continue_trims(
         model,
         (cascade.StraightFlightCondition(speed) for speed in (4.0, 5.0, 6.0, 7.0, 8.0)),

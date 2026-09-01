@@ -11,7 +11,7 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 
 ## Phase 1: schema v2 physics
 - [x] 1a flapped and all-moving surfaces (`all_moving_fraction`, `flap_effectiveness`, flap moment and drag)
-- [x] 1b propeller `CT(J)` with momentum-theory induced velocity and `CT0 <= (pi/2) J0^2` bound
+- [x] 1b propeller: polynomial thrust map (linear CT(J) and the NTNU X8 law as exact cases), momentum-theory induced velocity, discriminant check
 - [x] 1c whole-aircraft coefficient backend (`BodyModel`, `[body]` table, `deflection_map`, zero-area surfaces)
 - [x] 1d channels as linear coordinates; `control_from_actuators`
 - [x] Schema v2 in `spec.py`, fixture TOML converted, docs updated
@@ -23,9 +23,10 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 - [x] `cascade/plant.py` with tests; exports; README and architecture doc; commit
 
 ## Phase 3: Skywalker X8 spec from the published model
-- [ ] `aircraft/skywalker_x8.toml` with provenance; loader; propeller fit script and residual
-- [ ] Tests: coefficient reproduction, control derivative signs, trim at 18 m/s (both pitch variants)
-- [ ] `examples/x8_trim.py`; commit
+- [x] `aircraft/skywalker_x8.toml` with provenance; loader; propeller fit script and residual
+- [x] Tests: coefficient reproduction, control derivative signs, trim at 18 m/s (both pitch variants)
+- [x] `examples/x8_trim.py`; commit
+- [x] Trim gains a yaw-offset (sideslip) decision variable so rudderless aircraft balance yaw
 
 ## Phase 4: Glassbox integration and X8 replay validation
 - [ ] Glassbox `cascade` extra via uv path source; pytest marker

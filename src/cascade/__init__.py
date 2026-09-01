@@ -33,7 +33,12 @@ from cascade.model import (
     validate_model,
 )
 from cascade.plant import Plant, PlantConfig, PlantSample
-from cascade.reference import aerobatic_reference, aerobatic_reference_spec
+from cascade.reference import (
+    aerobatic_reference,
+    aerobatic_reference_spec,
+    skywalker_x8,
+    skywalker_x8_spec,
+)
 from cascade.spec import (
     AircraftSpec,
     BodySpec,
@@ -92,6 +97,8 @@ __all__ = [
     "rk4_step",
     "rollout",
     "save_aircraft_spec",
+    "skywalker_x8",
+    "skywalker_x8_spec",
     "stability_modes",
     "standard_environment",
     "trim_straight_flight",

@@ -30,7 +30,7 @@ def test_continuation_tracks_conventional_and_high_alpha_branches():
     conventional = continue_trims(
         model, (StraightFlightCondition(speed) for speed in (14.0, 12.0, 10.0))
     )
-    high_alpha_seed = jnp.array([0.0, np.deg2rad(75.0), 0.7, 0.0, -0.85, 0.0])
+    high_alpha_seed = jnp.array([0.0, np.deg2rad(75.0), 0.0, 0.7, 0.0, -0.85, 0.0])
     high_alpha = continue_trims(
         model,
         (StraightFlightCondition(speed) for speed in (4.0, 5.0, 6.0)),

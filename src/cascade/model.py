@@ -40,20 +40,22 @@ class SurfaceModel(NamedTuple):
 
 
 class PropellerModel(NamedTuple):
-    """Geometry and advance-ratio thrust parameters for ``P`` propellers.
+    """Geometry and a polynomial thrust map for ``P`` propellers.
 
-    ``thrust_coefficient`` is the static ``C_T = T / (rho n^2 D^4)`` and ``torque_coefficient``
-    the static ``C_Q = Q / (rho n^2 D^5)`` with ``n`` in revolutions per second. Thrust falls
-    linearly with advance ratio and reaches zero at ``zero_thrust_advance_ratio``.
+    ``thrust_map`` has shape ``[P, 2, 3]`` and defines
+    ``T / rho = D^4 sum_ij thrust_map[i, j] n^(i + 1) (V_a / D)^j`` with ``n`` in revolutions
+    per second and ``V_a`` the axial inflow, so a stopped propeller produces exactly no force.
+    The classical linear ``C_T(J) = C_T0 (1 - J / J_0)`` is the entry ``[[0, -C_T0 / J_0, 0],
+    [C_T0, 0, 0]]``; measured maps and published exit-velocity laws fit the same form.
+    ``torque_coefficient`` is the static ``C_Q = Q / (rho n^2 D^5)``.
     """
 
     position: Array
     direction: Array
     diameter: Array
-    thrust_coefficient: Array
-    zero_thrust_advance_ratio: Array
     torque_coefficient: Array
     spin_direction: Array
+    thrust_map: Array
     slipstream_map: Array
 
 
@@ -191,6 +193,39 @@ def broadcast_model(model: AircraftModel, batch_shape: tuple[int, ...]) -> Aircr
     return jax.tree.map(lambda value: jnp.broadcast_to(value, (*batch_shape, *value.shape)), model)
 
 
+def _validate_momentum_discriminant(propellers: PropellerModel, actuators: ActuatorModel) -> None:
+    """Require ``V_a^2 / 4 + T / (2 rho A) >= 0`` over the whole operating range.
+
+    That is the discriminant of the momentum-theory induced-velocity root. For a fixed shaft
+    speed the thrust map makes it a quadratic in axial airspeed, so its minimum is checked
+    exactly at every speed of a fine shaft-speed grid up to the propeller's maximum.
+    """
+
+    thrust_map = np.asarray(propellers.thrust_map)
+    diameters = np.asarray(propellers.diameter)
+    maxima = np.asarray(actuators.propeller_speed_max) / (2.0 * np.pi)
+    for index in range(thrust_map.shape[0]):
+        diameter = diameters[index]
+        disk_area = 0.25 * np.pi * diameter**2
+        coefficients = thrust_map[index]
+        for revolutions in np.linspace(0.0, maxima[index], 65):
+            powers = np.array([revolutions, revolutions**2])
+            constant = diameter**4 * (coefficients[:, 0] @ powers) / (2.0 * disk_area)
+            linear = diameter**3 * (coefficients[:, 1] @ powers) / (2.0 * disk_area)
+            quadratic = 0.25 + diameter**2 * (coefficients[:, 2] @ powers) / (2.0 * disk_area)
+            if quadratic < -1e-12:
+                minimum = -np.inf
+            elif quadratic <= 1e-12:
+                minimum = constant if abs(linear) <= 1e-9 else -np.inf
+            else:
+                minimum = constant - linear**2 / (4.0 * quadratic)
+            if minimum < -1e-9:
+                raise ValueError(
+                    f"propeller {index} thrust map violates the momentum-theory bound at "
+                    f"{revolutions:.1f} rev/s; induced velocity would become complex"
+                )
+
+
 def validate_model(model: AircraftModel) -> AircraftModel:
     """Validate static shapes and physical invariants at model-construction time."""
 
@@ -215,9 +250,11 @@ def validate_model(model: AircraftModel) -> AircraftModel:
         raise ValueError("propellers.position must have shape (P, 3)")
     if propellers.direction.shape != (n_propeller, 3):
         raise ValueError("propellers.direction must have shape (P, 3)")
-    for name in PropellerModel._fields[2:-1]:
+    for name in ("diameter", "torque_coefficient", "spin_direction"):
         if getattr(propellers, name).shape != (n_propeller,):
             raise ValueError(f"propellers.{name} must have shape {(n_propeller,)}")
+    if propellers.thrust_map.shape != (n_propeller, 2, 3):
+        raise ValueError("propellers.thrust_map must have shape (P, 2, 3)")
     if propellers.slipstream_map.shape != (n_propeller, n_surface):
         raise ValueError("propellers.slipstream_map must have shape (P, S)")
 
@@ -273,18 +310,9 @@ def validate_model(model: AircraftModel) -> AircraftModel:
         raise ValueError("body normal-force coefficient must be non-negative")
     if np.any(np.asarray(propellers.diameter) <= 0):
         raise ValueError("propeller diameters must be positive")
-    if np.any(np.asarray(propellers.thrust_coefficient) < 0):
-        raise ValueError("propeller thrust coefficients must be non-negative")
-    if np.any(np.asarray(propellers.zero_thrust_advance_ratio) <= 0):
-        raise ValueError("zero-thrust advance ratios must be positive")
     if np.any(np.asarray(propellers.torque_coefficient) < 0):
         raise ValueError("propeller torque coefficients must be non-negative")
-    momentum_bound = 0.5 * np.pi * np.square(np.asarray(propellers.zero_thrust_advance_ratio))
-    if np.any(np.asarray(propellers.thrust_coefficient) > momentum_bound):
-        raise ValueError(
-            "propeller thrust coefficient exceeds the momentum-theory bound "
-            "(pi / 2) * zero_thrust_advance_ratio**2"
-        )
+    _validate_momentum_discriminant(propellers, actuators)
     if np.any(np.asarray(propellers.slipstream_map) < 0):
         raise ValueError("slipstream weights must be non-negative")
     if np.any(np.asarray(actuators.surface_limit) < 0):

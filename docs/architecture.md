@@ -131,28 +131,31 @@ coefficient table alone, components alone, or both.
 
 ## Propulsion and propwash
 
-Propellers have position, thrust direction, diameter, spin direction, static thrust and torque
-coefficients, a zero-thrust advance ratio, and first-order motor dynamics. With `n` in
-revolutions per second and `J = V_a / (n D)` from the axial inflow at the propeller:
+Propellers have position, thrust direction, diameter, spin direction, a static torque
+coefficient, a polynomial thrust map, and first-order motor dynamics. With `n` in revolutions
+per second and `V_a` the axial inflow at the propeller:
 
 ```text
-T = rho n^2 D^4 C_T0 (1 - J / J_0)          written as rho C_T0 D^2 (nD) (nD - V_a / J_0)
+T / rho = D^4 sum_{i=1,2} sum_{j=0..2} c_ij n^i (V_a / D)^j      thrust map [2, 3]
 Q = rho n^2 D^5 C_Q0
-v_i (|V_a| + v_i) = T / (2 rho A)            momentum theory with axial inflow
+v_i (|V_a| + v_i) = T / (2 rho A)                                  momentum theory with inflow
 ```
 
-Thrust scales with density, is exactly zero for a stopped propeller, and becomes windmilling drag
-beyond the zero-thrust advance ratio. The induced velocity is the momentum-theory wake increment
-at the disk, computed through the cancellation-free root so it is exactly zero at zero thrust,
-negative when windmilling, and finite and differentiable everywhere; `validate_model` enforces
-`C_T0 <= (pi / 2) J_0^2` so the root's discriminant is a sum of squares. The increment is
+The map contains the classical linear `C_T(J) = C_T0 (1 - J / J_0)` as `c_20 = C_T0`,
+`c_11 = -C_T0 / J_0`, reproduces published exit-velocity laws such as the Skywalker X8's
+exactly, and is linear in its coefficients for identification. Thrust scales with density, is
+exactly zero for a stopped propeller by construction, and becomes windmilling drag where the map
+goes negative. The induced velocity is the momentum-theory wake increment at the disk, computed
+through the cancellation-free root so it is exactly zero at zero thrust, negative when
+windmilling, and finite and differentiable everywhere; `validate_model` checks the map over the
+whole shaft-speed range so the root's discriminant stays non-negative. The increment is
 distributed to surfaces through `slipstream_map[P, S]`, whose weights are relative to the disk
 value: surfaces in the developed wake see up to twice it.
 
-This is deliberately an interface as much as a model. Future versions can replace the linear
-`C_T(J)` with measured propeller maps, add oblique inflow, or model wake contraction and skew
-while preserving the surface-flow calculation. A `downwash_map[S, S]` weighting upstream lift
-into a local downwash would slot in at the same point.
+This is deliberately an interface as much as a model. Future versions can add oblique inflow or
+model wake contraction and skew while preserving the surface-flow calculation. A
+`downwash_map[S, S]` weighting upstream lift into a local downwash would slot in at the same
+point.
 
 ## Numerical policy
 
@@ -161,7 +164,7 @@ into a local downwash would slot in at the same point.
 - Singular aerodynamic divisions use explicit small speed scales.
 - Physical state projection bounds separation fractions, actuator positions, and propeller speeds.
 - Smooth actuator rate limiting uses `tanh`; unavoidable hardware bounds use clipping.
-- The momentum-theory bound on static thrust keeps the induced-velocity root real.
+- The momentum-theory check on the thrust map keeps the induced-velocity root real.
 - `rollout` holds one `Environment` per world by default and accepts a time-major sequence for
   gusts and moving air; both paths trace to the same program shape.
 - The core contains no Python-side mutation and no hidden global state.

@@ -67,11 +67,11 @@ def propulsion(
 ) -> PropulsionResult:
     """Calculate propeller wrench and momentum-theory induced velocity with axial inflow.
 
-    Thrust follows ``T = rho n^2 D^4 C_T0 (1 - J / J_0)`` with advance ratio ``J = V_a / (n D)``
-    written without dividing by ``n``, so it is exactly zero for a stopped propeller and turns
-    into windmilling drag beyond the zero-thrust advance ratio. The induced velocity is the
-    momentum-theory wake increment with axial inflow; ``validate_model`` bounds ``C_T0`` so its
-    discriminant is a sum of squares and the result stays finite and differentiable everywhere.
+    Thrust follows the polynomial map ``T / rho = D^4 sum_ij c_ij n^(i+1) (V_a / D)^j`` in shaft
+    speed and axial inflow, which is exactly zero for a stopped propeller and turns into
+    windmilling drag where the map goes negative. The induced velocity is the momentum-theory
+    wake increment with axial inflow; ``validate_model`` checks the map over the operating range
+    so the root's discriminant stays non-negative and the result finite and differentiable.
     """
 
     propellers = model.propellers
@@ -83,12 +83,11 @@ def propulsion(
     local_velocity = air_velocity_body[..., None, :] + rotational_velocity
     axial_speed = jnp.sum(local_velocity * propellers.direction, axis=-1)
 
-    tip_advance = revolutions * diameter
-    thrust_per_density = (
-        propellers.thrust_coefficient
-        * jnp.square(diameter)
-        * tip_advance
-        * (tip_advance - axial_speed / propellers.zero_thrust_advance_ratio)
+    speed_powers = jnp.stack((revolutions, jnp.square(revolutions)), axis=-1)
+    inflow = axial_speed / diameter
+    inflow_powers = jnp.stack((jnp.ones_like(inflow), inflow, jnp.square(inflow)), axis=-1)
+    thrust_per_density = diameter**4 * jnp.einsum(
+        "...pij,...pi,...pj->...p", propellers.thrust_map, speed_powers, inflow_powers
     )
     density = environment.density[..., None]
     thrust = density * thrust_per_density

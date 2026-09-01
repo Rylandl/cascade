@@ -21,8 +21,9 @@ class StraightFlightCondition:
     """Requested air-relative path for a constant-velocity, zero-rate trim.
 
     Flight-path angle is positive in a climb. Heading is the air-relative course clockwise from
-    north in NED and also fixes aircraft yaw. Wind is added to this air-relative velocity, so the
-    resulting ground track can differ from heading.
+    north in NED; body yaw differs from it by the trim's yaw offset, which is the sideslip a
+    rudderless or torque-loaded aircraft needs to balance yaw. Wind is added to this
+    air-relative velocity, so the resulting ground track can differ from heading.
     """
 
     airspeed_m_s: float
@@ -84,7 +85,8 @@ def trim_straight_flight(
 ) -> TrimResult:
     """Solve force and moment balance for straight, constant-velocity flight.
 
-    The decision vector is ``[roll, pitch, propeller commands..., control channels...]``.
+    The decision vector is ``[roll, pitch, yaw offset, propeller commands..., control
+    channels...]``, where the yaw offset is body yaw minus air-relative heading.
     The returned state has zero body rates and internally equilibrated actuators and aerodynamic
     separation, making it suitable as a rollout or linearization initial state.
     """
@@ -204,7 +206,7 @@ def _initial_decision(
     condition: StraightFlightCondition,
     initial: Array | TrimResult | None,
 ) -> Array:
-    size = 2 + model.n_propellers + model.n_control_channels
+    size = 3 + model.n_propellers + model.n_control_channels
     if isinstance(initial, TrimResult):
         initial = initial.decision
     if initial is not None:
@@ -215,12 +217,14 @@ def _initial_decision(
             raise ValueError("initial trim decision must be finite")
         return jnp.asarray(value)
 
-    # A modest positive pitch and throttle is a useful generic seed for small conventional
-    # aircraft. Continuation or an explicit decision should seed alternate/high-alpha branches.
+    # A modest positive pitch and half throttle is a useful generic seed for small conventional
+    # aircraft; low throttle can start inside a propeller's windmilling valley, where thrust
+    # first falls with throttle before rising, and trap a local solver at zero throttle.
+    # Continuation or an explicit decision should seed alternate/high-alpha branches.
     return jnp.concatenate(
         (
-            jnp.array([0.0, condition.flight_path_angle_rad + np.deg2rad(5.0)]),
-            jnp.full((model.n_propellers,), 0.35),
+            jnp.array([0.0, condition.flight_path_angle_rad + np.deg2rad(5.0), 0.0]),
+            jnp.full((model.n_propellers,), 0.5),
             jnp.zeros((model.n_control_channels,)),
         )
     )
@@ -233,10 +237,10 @@ def _trim_candidate(
     decision: Array,
 ) -> tuple[AircraftState, ControlInput]:
     speed, flight_path_angle, heading, altitude = condition
-    roll, pitch = decision[0], decision[1]
-    propeller_end = 2 + model.n_propellers
+    roll, pitch, yaw_offset = decision[0], decision[1], decision[2]
+    propeller_end = 3 + model.n_propellers
     control = ControlInput(
-        propeller=decision[2:propeller_end],
+        propeller=decision[3:propeller_end],
         channel=decision[propeller_end:],
     )
     cosine_gamma = jnp.cos(flight_path_angle)
@@ -250,7 +254,7 @@ def _trim_candidate(
     state = zero_state(model, altitude=altitude)
     state = state._replace(
         rigid_body=state.rigid_body._replace(
-            attitude=quaternion_from_euler(roll, pitch, heading),
+            attitude=quaternion_from_euler(roll, pitch, heading + yaw_offset),
             velocity=air_velocity_world + environment.wind,
         )
     )
@@ -281,14 +285,14 @@ _compiled_balance_jacobian = jax.jit(jax.jacfwd(_scaled_balance, argnums=3))
 def _decision_bounds(model: AircraftModel) -> tuple[np.ndarray, np.ndarray]:
     lower = np.concatenate(
         (
-            np.array([-np.deg2rad(80.0), -np.deg2rad(89.0)]),
+            np.array([-np.deg2rad(80.0), -np.deg2rad(89.0), -np.deg2rad(30.0)]),
             np.zeros(model.n_propellers),
             -np.ones(model.n_control_channels),
         )
     )
     upper = np.concatenate(
         (
-            np.array([np.deg2rad(80.0), np.deg2rad(89.0)]),
+            np.array([np.deg2rad(80.0), np.deg2rad(89.0), np.deg2rad(30.0)]),
             np.ones(model.n_propellers),
             np.ones(model.n_control_channels),
         )

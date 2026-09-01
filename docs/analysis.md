@@ -7,8 +7,9 @@ directly to integration, differentiation, or control code.
 ## Straight-flight trim and continuation
 
 `trim_straight_flight` holds airspeed, air-relative flight-path angle, and air-relative heading
-fixed, then solves for roll, pitch, normalized propeller commands, and abstract control-channel
-commands. Wind changes the resulting ground track. The solver enforces zero translational and
+fixed, then solves for roll, pitch, a yaw offset (the sideslip a rudderless or torque-loaded
+aircraft needs to balance yaw), propeller commands, and control-channel commands. Wind changes
+the resulting ground track. The solver enforces zero translational and
 angular acceleration. Actuator positions, propeller speed, and separation fractions are set to
 their equilibrium values before each residual evaluation.
 
@@ -25,8 +26,8 @@ trim = cascade.trim_straight_flight(model, condition)
 assert trim.success, trim.message
 ```
 
-The decision vector is ordered as roll, pitch, all propeller commands, then all surface-control
-channels. `continue_trims` warm-starts each condition with the previous decision. This matters
+The decision vector is ordered as roll, pitch, yaw offset, all propeller commands, then all
+surface-control channels. `continue_trims` warm-starts each condition with the previous decision. This matters
 because post-stall trim is non-convex: conventional and high-alpha equilibria can coexist, and the
 initial seed selects a branch. Failed candidates are returned with their physical and normalized
 balance residuals; solver termination alone is never reported as successful trim.

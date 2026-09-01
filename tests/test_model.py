@@ -35,12 +35,32 @@ def test_invalid_slipstream_shape_is_rejected():
         validate_model(nested_replace(model, "propellers", propellers))
 
 
-def test_momentum_bound_rejects_excessive_static_thrust():
+def test_momentum_bound_rejects_a_thrust_map_that_windmills_too_hard():
     model = aerobatic_reference()
-    bound = 0.5 * jnp.pi * jnp.square(model.propellers.zero_thrust_advance_ratio)
-    propellers = nested_replace(model.propellers, "thrust_coefficient", 1.1 * bound)
+    # A steep negative airspeed slope makes the momentum-theory discriminant negative at
+    # moderate airspeed, which would give a complex induced velocity.
+    steep = model.propellers.thrust_map.at[0, 0, 1].set(-5.0)
+    propellers = nested_replace(model.propellers, "thrust_map", steep)
     with pytest.raises(ValueError, match="momentum"):
         validate_model(nested_replace(model, "propellers", propellers))
+
+
+def test_linear_thrust_law_satisfies_the_momentum_bound_up_to_its_limit():
+    model = aerobatic_reference()
+    thrust_map = model.propellers.thrust_map
+    static, slope = float(thrust_map[0, 1, 0]), float(thrust_map[0, 0, 1])
+    zero_thrust_advance_ratio = -static / slope
+    bound = 0.5 * jnp.pi * zero_thrust_advance_ratio**2
+    # C_T0 <= (pi / 2) J_0^2 is the closed-form condition for this special case.
+    def scaled_model(scale):
+        thrust = thrust_map.at[0, 1, 0].set(scale * bound)
+        thrust = thrust.at[0, 0, 1].set(-scale * bound / zero_thrust_advance_ratio)
+        propellers = nested_replace(model.propellers, "thrust_map", thrust)
+        return nested_replace(model, "propellers", propellers)
+
+    validate_model(scaled_model(0.99))
+    with pytest.raises(ValueError, match="momentum"):
+        validate_model(scaled_model(1.1))
 
 
 def test_zero_area_surface_is_valid_and_produces_no_force():

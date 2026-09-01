@@ -68,17 +68,19 @@ logs carry generalized surface angles. Physical limits apply to the mapped angle
 | `name` | | unique |
 | `position_m`, `direction_body` | m, unit vector | hub position and thrust axis, body FRD |
 | `diameter_m` | m | disk diameter |
-| `thrust_coefficient_static` | 1 | `C_T0 = T / (rho n² D⁴)` at zero advance ratio, `n` in rev/s |
-| `zero_thrust_advance_ratio` | 1 | `J_0` where thrust crosses zero; geometric pitch over diameter is a good first guess |
+| `thrust_map` | 1 | 2x3 coefficients `c_ij` of `T / rho = D⁴ Σ c_ij n^(i+1) (V_a / D)^j`, rows for `n`, `n²` in rev/s, columns for `(V_a / D)^0..2` |
 | `torque_coefficient_static` | 1 | `C_Q0 = Q / (rho n² D⁵)` |
 | `spin_direction` | ±1 | sign of the reaction torque about the thrust axis |
 | `slipstream_weights` | 1 | per surface, multiplying the disk induced velocity; developed-wake surfaces see up to 2 |
 | `speed_min_rad_s`, `speed_max_rad_s` | rad/s | throttle `0..1` maps linearly between them |
 | `time_constant_s`, `acceleration_limit_rad_s2` | s, rad/s² | motor lag and smooth acceleration limit |
 
-Validation requires `C_T0 <= (pi / 2) J_0²`, which every real propeller satisfies by a wide
-margin; it keeps the momentum-theory induced-velocity root real at every airspeed. A published
-static thrust `T_s` at speed `omega_max` converts as `C_T0 = T_s (2 pi)² / (rho omega_max² D⁴)`.
+The classical linear `C_T(J) = C_T0 (1 - J / J_0)` is the map `[[0, -C_T0 / J_0, 0],
+[C_T0, 0, 0]]`; a published static thrust `T_s` at speed `omega_max` gives
+`C_T0 = T_s (2 pi)² / (rho omega_max² D⁴)`, and geometric pitch over diameter is a good first
+guess for `J_0`. Validation checks the map over the shaft-speed range so the momentum-theory
+induced-velocity root stays real; for the linear law that reduces to `C_T0 <= (pi / 2) J_0²`.
+`scripts/fit_x8_propeller.py` shows how a published exit-velocity law expands into the map.
 
 ## `[body]` (optional)
 

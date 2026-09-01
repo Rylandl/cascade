@@ -83,8 +83,7 @@ class PropellerSpec:
     position_m: tuple[float, float, float]
     direction_body: tuple[float, float, float]
     diameter_m: float
-    thrust_coefficient_static: float
-    zero_thrust_advance_ratio: float
+    thrust_map: tuple[tuple[float, float, float], tuple[float, float, float]]
     torque_coefficient_static: float
     spin_direction: float
     slipstream_weights: tuple[float, ...]
@@ -98,6 +97,10 @@ class PropellerSpec:
         values = dict(data)
         values["position_m"] = _vector(values["position_m"], 3, "propeller.position_m")
         values["direction_body"] = _vector(values["direction_body"], 3, "propeller.direction_body")
+        rows = tuple(_vector(row, 3, "propeller.thrust_map row") for row in values["thrust_map"])
+        if len(rows) != 2:
+            raise SpecError("propeller.thrust_map must contain two rows (n and n squared)")
+        values["thrust_map"] = rows
         values["slipstream_weights"] = tuple(float(value) for value in values["slipstream_weights"])
         return cls(**values)
 
@@ -330,16 +333,13 @@ class AircraftSpec:
                 n_propeller, 3
             ),
             diameter=jnp.asarray([propeller.diameter_m for propeller in propellers]),
-            thrust_coefficient=jnp.asarray(
-                [propeller.thrust_coefficient_static for propeller in propellers]
-            ),
-            zero_thrust_advance_ratio=jnp.asarray(
-                [propeller.zero_thrust_advance_ratio for propeller in propellers]
-            ),
             torque_coefficient=jnp.asarray(
                 [propeller.torque_coefficient_static for propeller in propellers]
             ),
             spin_direction=jnp.asarray([propeller.spin_direction for propeller in propellers]),
+            thrust_map=jnp.asarray([propeller.thrust_map for propeller in propellers]).reshape(
+                n_propeller, 2, 3
+            ),
             slipstream_map=jnp.asarray(
                 [propeller.slipstream_weights for propeller in propellers]
             ).reshape(n_propeller, n_surface),

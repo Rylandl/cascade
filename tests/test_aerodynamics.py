@@ -154,8 +154,10 @@ def test_thrust_falls_with_airspeed_scales_with_density_and_windmills():
     model = aerobatic_reference()
     speed_max = float(model.actuators.propeller_speed_max[0])
     diameter = float(model.propellers.diameter[0])
-    zero_thrust_speed = (
-        float(model.propellers.zero_thrust_advance_ratio[0]) * speed_max / (2.0 * jnp.pi) * diameter
+    # The fixture map is the linear C_T(J) law: thrust crosses zero at V_a = J_0 n D.
+    thrust_map = model.propellers.thrust_map[0]
+    zero_thrust_speed = float(
+        -thrust_map[1, 0] * speed_max / (2.0 * jnp.pi) * diameter / thrust_map[0, 1]
     )
     airspeeds = jnp.array([0.0, 6.0, 12.0, zero_thrust_speed, 30.0])
     state = zero_state(model, batch_shape=(5,))
