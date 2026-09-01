@@ -46,6 +46,9 @@ propeller thrust itself is excluded from aerodynamic coefficients.
 
 Sweeps equilibrate the separation state at every point. They represent a static coefficient curve,
 not a pitch-rate sweep with dynamic-stall hysteresis. Use a rollout to study transient separation.
+Pass a `control` to sweep control derivatives; channels are linear coordinates in the units the
+specification chose, so a published model with radian-valued channels can be checked directly
+against its tables. `rollout` accepts a time-major `environments` sequence for gusts.
 
 ## Quaternion-safe local linearization
 

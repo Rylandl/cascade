@@ -71,6 +71,85 @@ class ActuatorModel(NamedTuple):
     propeller_acceleration_limit: Array
 
 
+class LongitudinalCoefficients(NamedTuple):
+    """Lift or pitching-moment polynomial in angle of attack, pitch rate, and elevator."""
+
+    zero: Array
+    alpha: Array
+    q: Array
+    elevator: Array
+
+
+class DragCoefficients(NamedTuple):
+    """Drag polynomial in angle of attack, sideslip, pitch rate, and elevator."""
+
+    zero: Array
+    alpha: Array
+    alpha_sq: Array
+    beta: Array
+    beta_sq: Array
+    q: Array
+    elevator_sq: Array
+
+
+class LateralCoefficients(NamedTuple):
+    """Side-force, rolling-moment, or yawing-moment polynomial in sideslip, rates, and controls."""
+
+    zero: Array
+    beta: Array
+    p: Array
+    r: Array
+    aileron: Array
+    rudder: Array
+
+
+class BodyModel(NamedTuple):
+    """Whole-aircraft polynomial aerodynamics about the center of mass.
+
+    This is the classical Beard and McLain coefficient form used by published small-UAV models.
+    It is evaluated from the air velocity at the center of mass and added to the component
+    surfaces, so an aircraft can be described by a coefficient table alone (with zero-area
+    surfaces carrying its physical actuators), by components alone, or by a mix. All entries
+    are per-world scalars except ``deflection_map`` with shape ``[3, S]``, which forms the
+    generalized aileron, elevator, and rudder angles from the physical surface deflections.
+    Static angle-of-attack polynomials blend beyond ``stall_angle`` to a flat plate with
+    ``normal_force_coefficient`` (about 2 for a thin plate) and ``pitch_flat_plate``.
+    """
+
+    lift: LongitudinalCoefficients
+    drag: DragCoefficients
+    side: LateralCoefficients
+    roll: LateralCoefficients
+    pitch: LongitudinalCoefficients
+    yaw: LateralCoefficients
+    stall_angle: Array
+    stall_width: Array
+    normal_force_coefficient: Array
+    pitch_flat_plate: Array
+    deflection_map: Array
+
+
+def zero_body(n_surfaces: int) -> BodyModel:
+    """A body block that contributes nothing, for component-only aircraft."""
+
+    zero = jnp.asarray(0.0)
+    longitudinal = LongitudinalCoefficients(zero, zero, zero, zero)
+    lateral = LateralCoefficients(zero, zero, zero, zero, zero, zero)
+    return BodyModel(
+        lift=longitudinal,
+        drag=DragCoefficients(zero, zero, zero, zero, zero, zero, zero),
+        side=lateral,
+        roll=lateral,
+        pitch=longitudinal,
+        yaw=lateral,
+        stall_angle=jnp.asarray(0.3),
+        stall_width=jnp.asarray(0.05),
+        normal_force_coefficient=zero,
+        pitch_flat_plate=zero,
+        deflection_map=jnp.zeros((3, n_surfaces)),
+    )
+
+
 class AircraftModel(NamedTuple):
     mass: Array
     inertia: Array
@@ -81,6 +160,7 @@ class AircraftModel(NamedTuple):
     surfaces: SurfaceModel
     propellers: PropellerModel
     actuators: ActuatorModel
+    body: BodyModel
 
     @property
     def n_surfaces(self) -> int:
@@ -150,6 +230,16 @@ def validate_model(model: AircraftModel) -> AircraftModel:
         if getattr(actuators, name).shape != (n_propeller,):
             raise ValueError(f"actuators.{name} must have shape {(n_propeller,)}")
 
+    body = model.body
+    for name, group in zip(BodyModel._fields, body, strict=True):
+        if name == "deflection_map":
+            continue
+        for leaf in jax.tree.leaves(group):
+            if leaf.shape != ():
+                raise ValueError(f"body.{name} coefficients must be scalars, got {leaf.shape}")
+    if body.deflection_map.shape != (3, n_surface):
+        raise ValueError("body.deflection_map must have shape (3, S)")
+
     arrays = jax.tree.leaves(model)
     if not all(np.all(np.isfinite(np.asarray(jax.device_get(value)))) for value in arrays):
         raise ValueError("model contains non-finite values")
@@ -177,6 +267,10 @@ def validate_model(model: AircraftModel) -> AircraftModel:
         raise ValueError("flap effectiveness must be non-negative")
     if np.any(np.asarray(surfaces.drag_coefficient_flap) < 0):
         raise ValueError("flap drag coefficients must be non-negative")
+    if float(np.asarray(body.stall_angle)) <= 0 or float(np.asarray(body.stall_width)) <= 0:
+        raise ValueError("body stall angle and width must be positive")
+    if float(np.asarray(body.normal_force_coefficient)) < 0:
+        raise ValueError("body normal-force coefficient must be non-negative")
     if np.any(np.asarray(propellers.diameter) <= 0):
         raise ValueError("propeller diameters must be positive")
     if np.any(np.asarray(propellers.thrust_coefficient) < 0):

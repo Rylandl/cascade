@@ -28,12 +28,22 @@ class SurfaceAirData(NamedTuple):
     separation_equilibrium: Array
 
 
+class BodyResult(NamedTuple):
+    force_body: Array
+    moment_body: Array
+    coefficients: Array
+    angle_of_attack: Array
+    sideslip: Array
+    airspeed: Array
+
+
 class AerodynamicResult(NamedTuple):
     force_body: Array
     moment_body: Array
     force_per_surface: Array
     moment_per_surface: Array
     air: SurfaceAirData
+    body: BodyResult
 
 
 def deflected_surface_frames(model: AircraftModel, deflection: Array) -> Array:
@@ -225,6 +235,126 @@ def aerodynamic_coefficients(
     return lift, drag, moment
 
 
+def body_aerodynamics(
+    model: AircraftModel,
+    state: AircraftState,
+    environment: Environment,
+    air_velocity_body: Array,
+) -> BodyResult:
+    """Evaluate the whole-aircraft coefficient block about the center of mass.
+
+    Forces are formed in the wind frame from ``C_L``, ``C_D``, ``C_Y`` and rotated to the body
+    with the standard wind-to-body rotation; moments are ``q S b C_l``, ``q S c C_m``,
+    ``q S b C_n`` directly in body axes. Rate terms are written with one power of airspeed
+    fewer so that the ``1 / V_a`` of the non-dimensional rate never appears and the block is
+    finite at rest. Slipstream does not reach the body block; it belongs to component surfaces.
+    """
+
+    body = model.body
+    axial, spanwise, normal = (
+        air_velocity_body[..., 0],
+        air_velocity_body[..., 1],
+        air_velocity_body[..., 2],
+    )
+    planar_speed_squared = jnp.square(axial) + jnp.square(normal)
+    planar_speed = jnp.sqrt(planar_speed_squared + 1e-8)
+    airspeed = jnp.sqrt(planar_speed_squared + jnp.square(spanwise) + 1e-8)
+    angle_regularizer = 1e-3 * jnp.exp(-planar_speed_squared / 1e-6)
+    alpha = jnp.arctan2(normal, axial + angle_regularizer)
+    beta = jnp.arctan2(spanwise, planar_speed)
+    rate_p, rate_q, rate_r = (
+        state.rigid_body.angular_velocity[..., 0],
+        state.rigid_body.angular_velocity[..., 1],
+        state.rigid_body.angular_velocity[..., 2],
+    )
+    deflection = jnp.einsum(
+        "...ds,...s->...d", body.deflection_map, state.actuators.surface_deflection
+    )
+    aileron, elevator, rudder = deflection[..., 0], deflection[..., 1], deflection[..., 2]
+
+    separation = sigmoid((smooth_abs(alpha) - body.stall_angle) / body.stall_width)
+    attached = 1.0 - separation
+    sine, cosine = jnp.sin(alpha), jnp.cos(alpha)
+    absolute_sine = smooth_abs(sine)
+    lift, drag, side = body.lift, body.drag, body.side
+    roll, pitch, yaw = body.roll, body.pitch, body.yaw
+
+    plate_normal = body.normal_force_coefficient * sine * absolute_sine
+    lift_static = (
+        attached * (lift.zero + lift.alpha * alpha)
+        + separation * plate_normal * cosine
+        + lift.elevator * elevator
+    )
+    drag_static = (
+        attached * (drag.zero + drag.alpha * alpha + drag.alpha_sq * jnp.square(alpha))
+        + separation * body.normal_force_coefficient * absolute_sine**3
+        + drag.beta * beta
+        + drag.beta_sq * jnp.square(beta)
+        + drag.elevator_sq * jnp.square(elevator)
+    )
+    side_static = side.zero + side.beta * beta + side.aileron * aileron + side.rudder * rudder
+    roll_static = roll.zero + roll.beta * beta + roll.aileron * aileron + roll.rudder * rudder
+    pitch_static = (
+        attached * (pitch.zero + pitch.alpha * alpha)
+        + separation * body.pitch_flat_plate * sine * absolute_sine
+        + pitch.elevator * elevator
+    )
+    yaw_static = yaw.zero + yaw.beta * beta + yaw.aileron * aileron + yaw.rudder * rudder
+
+    half_chord = 0.5 * model.reference_chord
+    half_span = 0.5 * model.reference_span
+    lift_rate = lift.q * half_chord * rate_q
+    drag_rate = drag.q * half_chord * rate_q
+    side_rate = half_span * (side.p * rate_p + side.r * rate_r)
+    roll_rate = half_span * (roll.p * rate_p + roll.r * rate_r)
+    pitch_rate = pitch.q * half_chord * rate_q
+    yaw_rate = half_span * (yaw.p * rate_p + yaw.r * rate_r)
+
+    dynamic_pressure = 0.5 * environment.density * jnp.square(airspeed)
+    rate_pressure = 0.5 * environment.density * airspeed
+    area = model.reference_area
+    lift_force = area * (dynamic_pressure * lift_static + rate_pressure * lift_rate)
+    drag_force = area * (dynamic_pressure * drag_static + rate_pressure * drag_rate)
+    side_force = area * (dynamic_pressure * side_static + rate_pressure * side_rate)
+    span_area = area * model.reference_span
+    chord_area = area * model.reference_chord
+    roll_moment = span_area * (dynamic_pressure * roll_static + rate_pressure * roll_rate)
+    pitch_moment = chord_area * (dynamic_pressure * pitch_static + rate_pressure * pitch_rate)
+    yaw_moment = span_area * (dynamic_pressure * yaw_static + rate_pressure * yaw_rate)
+
+    sine_beta, cosine_beta = jnp.sin(beta), jnp.cos(beta)
+    # Standard wind-to-body rotation applied to (-D, Y, -L).
+    axial_force = -drag_force * cosine_beta - side_force * sine_beta
+    force_body = jnp.stack(
+        (
+            axial_force * cosine + lift_force * sine,
+            -drag_force * sine_beta + side_force * cosine_beta,
+            axial_force * sine - lift_force * cosine,
+        ),
+        axis=-1,
+    )
+    moment_body = jnp.stack((roll_moment, pitch_moment, yaw_moment), axis=-1)
+    coefficients = jnp.stack(
+        (
+            lift_static + lift_rate / airspeed,
+            drag_static + drag_rate / airspeed,
+            side_static + side_rate / airspeed,
+            roll_static + roll_rate / airspeed,
+            pitch_static + pitch_rate / airspeed,
+            yaw_static + yaw_rate / airspeed,
+        ),
+        axis=-1,
+    )
+    return BodyResult(
+        force_body=force_body,
+        moment_body=moment_body,
+        coefficients=coefficients,
+        angle_of_attack=alpha,
+        sideslip=beta,
+        airspeed=airspeed,
+    )
+
+
 def aerodynamics(
     model: AircraftModel,
     state: AircraftState,
@@ -232,7 +362,7 @@ def aerodynamics(
     air_velocity_body: Array,
     induced_velocity: Array,
 ) -> AerodynamicResult:
-    """Evaluate component aerodynamic forces and moments about the center of mass."""
+    """Evaluate component and whole-aircraft aerodynamics about the center of mass."""
 
     surfaces = model.surfaces
     air, frames = surface_air_data(model, state, environment, air_velocity_body, induced_velocity)
@@ -266,12 +396,14 @@ def aerodynamics(
     intrinsic_moment_body = jnp.einsum("...sij,...sj->...si", frames, intrinsic_moment_surface)
     moment_body = jnp.cross(surfaces.position, force_body, axis=-1) + intrinsic_moment_body
 
+    body = body_aerodynamics(model, state, environment, air_velocity_body)
     return AerodynamicResult(
-        force_body=jnp.sum(force_body, axis=-2),
-        moment_body=jnp.sum(moment_body, axis=-2),
+        force_body=jnp.sum(force_body, axis=-2) + body.force_body,
+        moment_body=jnp.sum(moment_body, axis=-2) + body.moment_body,
         force_per_surface=force_body,
         moment_per_surface=moment_body,
         air=air,
+        body=body,
     )
 
 

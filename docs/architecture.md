@@ -24,7 +24,9 @@ The physics layer follows conventional flight-dynamics coordinates:
 
 Keeping the aerospace convention inside the model makes coefficient data and flight-controller
 integration less error-prone. MuJoCo, visualization, and robotics APIs should convert at their
-boundaries rather than changing the physics convention.
+boundaries rather than changing the physics convention. `cascade.canonical` is that boundary for
+the NWU-world, FLU-body, scalar-first 13-vector state used by identification and control tooling
+such as Glassbox; it is the only place frame conversion happens.
 
 ## Static model and dynamic state
 
@@ -36,7 +38,8 @@ AircraftModel
 ├── mass and inertia
 ├── SurfaceModel[S]
 ├── PropellerModel[P]
-└── ActuatorModel[S, P, C]
+├── ActuatorModel[S, P, C]
+└── BodyModel                whole-aircraft coefficient table, deflection_map[3, S]
 
 AircraftState
 ├── RigidBodyState        position, attitude, velocity, angular velocity
@@ -45,12 +48,17 @@ AircraftState
 
 ControlInput
 ├── propeller[P]          normalized 0..1 commands
-└── channel[C]            normalized -1..1 abstract surface channels
+└── channel[C]            linear control coordinates in the units the specification chose
 ```
 
 `ActuatorModel.surface_map[S, C]` maps named host-side channels such as aileron, elevator, and
-rudder into physical surface angles. This supports elevons, V-tails, flaperons, differential
-surfaces, and unconventional fixed-wing layouts without branching in the compiled dynamics.
+rudder into physical surface angles. Channels are linear coordinates in whatever units the
+aircraft specification chose for its control map: normalized `[-1, 1]` commands for a
+controller-facing airframe, or radians for one whose logs carry generalized surface angles.
+Physical limits are enforced on the mapped angle, never on the channel. The map supports
+elevons, V-tails, flaperons, differential surfaces, and unconventional layouts without branching
+in the compiled dynamics. A surface may have zero area and exist only to carry a physical,
+lagged, limited actuator whose angle feeds the coefficient table.
 
 Each compiled rollout has one static aircraft topology. Numerical model arrays can carry the same
 leading world dimensions as state, allowing mass, inertia, aerodynamic coefficients, and actuator
@@ -65,33 +73,86 @@ For surface `i`, local velocity through the air is
 v_i = R_bw (v_world - wind_world) + omega_body x r_i + v_slipstream_i
 ```
 
-and is rotated into the possibly deflected surface frame. Each surface independently computes
-airspeed, angle of attack, dynamic pressure, attached-flow coefficients, and separated-flow
-coefficients. Forces are rotated back to the body frame and moments are accumulated at the center
-of mass.
+and is rotated into the surface frame. Each surface independently computes airspeed, angle of
+attack, dynamic pressure, attached-flow coefficients, and separated-flow coefficients. Forces are
+rotated back to the body frame and moments are accumulated at the center of mass.
+
+A physical deflection `delta` is split by the static `all_moving_fraction` `w`. The all-moving
+share `w delta` rotates the surface frame, which is what a stabilator or V-tail does and shifts
+the local angle of attack including its stall. The flap share `(1 - w) delta` leaves the frame
+alone and enters the coefficients through the flap effectiveness `tau`:
+
+```text
+CL_att = CL0 + CLa (alpha + tau delta_flap)
+CD_att = CD0 + k CL_att^2 + CD_flap delta_flap^2
+Cm_att = Cm0 + Cma alpha + Cm_flap delta_flap
+alpha_sep = alpha + tau delta_flap                  flat-plate incidence
+```
 
 The attached model is a conventional lift-slope, profile-drag, induced-drag, and pitching-moment
-model. The separated model approaches flat-plate behavior and remains defined for the entire
-`atan2` angle range. A continuous separation fraction blends the two:
+model. The separated model approaches flat-plate behavior at the flapped incidence and remains
+defined for the entire `atan2` angle range, so a stalled aileron or elevator keeps the reduced
+authority that post-stall and prop-hanging flight rely on. A continuous separation fraction
+blends the two:
 
 ```text
 C = (1 - separation) C_attached + separation C_separated
 ```
 
-The equilibrium separation fraction is a smooth function of absolute angle of attack. The actual
-fraction follows it with separate separation and reattachment time constants. This gives a compact,
-differentiable hysteresis state and leaves room for a calibrated Goman-Khrabrov or learned residual
-model without changing `AircraftState`.
+The equilibrium separation fraction is a smooth function of the surface's frame angle of attack;
+a flap does not shift the stall angle in this version. The actual fraction follows the
+equilibrium with separate separation and reattachment time constants. This gives a compact,
+differentiable hysteresis state and leaves room for a calibrated Goman-Khrabrov or learned
+residual model without changing `AircraftState`.
+
+## Whole-aircraft coefficient backend
+
+`BodyModel` evaluates the classical polynomial form used by published small-UAV models from the
+air velocity and body rates at the center of mass and adds its wrench to the component surfaces:
+
+```text
+C_L = CL0 + CLa a + CLq (c q / 2Va) + CLde de
+C_D = CD0 + CDa a + CDa2 a^2 + CDb b + CDb2 b^2 + CDq (c q / 2Va) + CDde2 de^2
+C_Y = CY0 + CYb b + CYp (b p / 2Va) + CYr (b r / 2Va) + CYda da + CYdr dr
+C_l = Cl0 + Clb b + Clp (b p / 2Va) + Clr (b r / 2Va) + Clda da + Cldr dr
+C_m = Cm0 + Cma a + Cmq (c q / 2Va) + Cmde de
+C_n = Cn0 + Cnb b + Cnp (b p / 2Va) + Cnr (b r / 2Va) + Cnda da + Cndr dr
+```
+
+Forces are rotated from the wind frame with the standard wind-to-body rotation; moments are
+formed directly in body axes with the reference span and chord. Rate terms are evaluated with
+one power of airspeed fewer so the `1 / Va` of the non-dimensional rate never appears and the
+block is finite at rest. The static angle-of-attack polynomials blend beyond `stall_angle` to a
+flat plate with `normal_force_coefficient` and `pitch_flat_plate`, which keeps a published
+low-angle model finite through the full envelope. Generalized aileron, elevator, and rudder
+angles come from the physical actuators through `deflection_map[3, S]`, so the coefficient
+table sees lagged, limited surfaces exactly as the component model does. An aircraft can be a
+coefficient table alone, components alone, or both.
 
 ## Propulsion and propwash
 
-Propellers have position, thrust direction, disk area, spin direction, thrust/torque coefficients,
-and first-order motor dynamics. A static momentum-theory induced velocity is distributed to
-surfaces through `slipstream_map[P, S]`.
+Propellers have position, thrust direction, diameter, spin direction, static thrust and torque
+coefficients, a zero-thrust advance ratio, and first-order motor dynamics. With `n` in
+revolutions per second and `J = V_a / (n D)` from the axial inflow at the propeller:
 
-This is deliberately an interface as much as a model. Future versions can replace static induced
-velocity with advance-ratio propeller maps, skewed wakes, or a vortex-particle wake while preserving
-the surface-flow calculation.
+```text
+T = rho n^2 D^4 C_T0 (1 - J / J_0)          written as rho C_T0 D^2 (nD) (nD - V_a / J_0)
+Q = rho n^2 D^5 C_Q0
+v_i (|V_a| + v_i) = T / (2 rho A)            momentum theory with axial inflow
+```
+
+Thrust scales with density, is exactly zero for a stopped propeller, and becomes windmilling drag
+beyond the zero-thrust advance ratio. The induced velocity is the momentum-theory wake increment
+at the disk, computed through the cancellation-free root so it is exactly zero at zero thrust,
+negative when windmilling, and finite and differentiable everywhere; `validate_model` enforces
+`C_T0 <= (pi / 2) J_0^2` so the root's discriminant is a sum of squares. The increment is
+distributed to surfaces through `slipstream_map[P, S]`, whose weights are relative to the disk
+value: surfaces in the developed wake see up to twice it.
+
+This is deliberately an interface as much as a model. Future versions can replace the linear
+`C_T(J)` with measured propeller maps, add oblique inflow, or model wake contraction and skew
+while preserving the surface-flow calculation. A `downwash_map[S, S]` weighting upstream lift
+into a local downwash would slot in at the same point.
 
 ## Numerical policy
 
@@ -100,6 +161,9 @@ the surface-flow calculation.
 - Singular aerodynamic divisions use explicit small speed scales.
 - Physical state projection bounds separation fractions, actuator positions, and propeller speeds.
 - Smooth actuator rate limiting uses `tanh`; unavoidable hardware bounds use clipping.
+- The momentum-theory bound on static thrust keeps the induced-velocity root real.
+- `rollout` holds one `Environment` per world by default and accepts a time-major sequence for
+  gusts and moving air; both paths trace to the same program shape.
 - The core contains no Python-side mutation and no hidden global state.
 
 ## API layers
@@ -113,6 +177,8 @@ integration and rollout                jit / grad / scan / vmap
                  ↓
 trim, sweeps, local linearization       analysis over the same pure core
                  ↓
+canonical boundary and plant adapter    frame conversion, stepped hidden plant
+                 ↓
 environments and controllers           future autonomy packages
                  ↓
 rendering and hardware adapters         boundary coordinate conversion
@@ -123,11 +189,12 @@ rendering and hardware adapters         boundary coordinate conversion
 ### Milestone 1 — physics kernel
 
 - Batched 6-DoF rigid-body dynamics.
-- Component surfaces and full-envelope quasi-steady aerodynamics.
+- Component surfaces with flapped and all-moving controls and full-envelope quasi-steady
+  aerodynamics.
 - Continuous separation dynamics.
-- Propeller, slipstream, and actuator dynamics.
+- Advance-ratio propeller, momentum-theory slipstream, and actuator dynamics.
 - Differentiable RK4 rollouts and an illustrative reference aircraft.
-- Invariant, full-envelope finiteness, batching, JIT, and gradient tests.
+- Invariant, full-envelope finiteness, conservation, batching, JIT, and gradient tests.
 
 ### Milestone 2 — analysis and calibration
 
@@ -135,17 +202,17 @@ rendering and hardware adapters         boundary coordinate conversion
 - Quaternion-safe discrete linearization and stability modes from automatic differentiation.
 - Vectorized full-envelope aerodynamic coefficient sweeps.
 - Versioned, named, unit-explicit aircraft specifications with TOML round-tripping.
-- Coefficient-table and smooth-spline backends.
-- Log schema, parameter estimation, uncertainty, and learned residual forces.
-- A physically identified and validated reference-airframe dataset. The current packaged airframe
-  remains an illustrative software fixture.
+- Whole-aircraft coefficient backend for published models; smooth-spline tables later.
+- Canonical state boundary and a stepped plant for identification tooling.
+- A published, physically identified reference airframe (Skywalker X8) validated against real
+  flight through that boundary. The aerobatic fixture remains an illustrative software fixture.
 
 ### Milestone 3 — autonomy tooling
 
 - Direct-actuator Gymnasium and native-JAX environments.
 - Rate, attitude, airspeed, altitude, and path controllers.
-- Domain randomization and observation/sensor models.
-- MPC and trajectory-optimization examples through stall.
+- Domain randomization, gust models, and observation/sensor models.
+- MPC and trajectory-optimization examples through stall and transition.
 
 ### Milestone 4 — world integration
 
@@ -156,8 +223,8 @@ rendering and hardware adapters         boundary coordinate conversion
 ### Milestone 5 — unsteady high-alpha fidelity
 
 - Calibrated dynamic-stall model with convective time scaling.
-- Advance-ratio and oblique-inflow propeller maps.
-- Propwash contraction/skew and surface occlusion.
+- Measured propeller maps and oblique-inflow corrections.
+- Propwash contraction/skew, surface occlusion, and wing downwash on downstream surfaces.
 - Optional vortex-wake or learned-memory residual backend.
 
 ## Explicit non-goals

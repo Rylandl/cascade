@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import tomllib
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Self
 
@@ -11,9 +11,14 @@ import tomli_w
 from cascade.model import (
     ActuatorModel,
     AircraftModel,
+    BodyModel,
+    DragCoefficients,
+    LateralCoefficients,
+    LongitudinalCoefficients,
     PropellerModel,
     SurfaceModel,
     validate_model,
+    zero_body,
 )
 
 SCHEMA_VERSION = 2
@@ -104,6 +109,117 @@ class PropellerSpec:
 
 
 @dataclass(frozen=True, slots=True)
+class LongitudinalCoefficientSpec:
+    """Lift or pitching moment: ``zero + alpha_rad * a + q * (c q / 2 V_a) + elevator_rad * de``."""
+
+    zero: float
+    alpha_rad: float
+    q: float
+    elevator_rad: float
+
+
+@dataclass(frozen=True, slots=True)
+class DragCoefficientSpec:
+    zero: float
+    alpha_rad: float
+    alpha_sq_rad2: float
+    beta_rad: float
+    beta_sq_rad2: float
+    q: float
+    elevator_sq_rad2: float
+
+
+@dataclass(frozen=True, slots=True)
+class LateralCoefficientSpec:
+    """Side force, rolling moment, or yawing moment in sideslip, rates, and controls."""
+
+    zero: float
+    beta_rad: float
+    p: float
+    r: float
+    aileron_rad: float
+    rudder_rad: float
+
+
+@dataclass(frozen=True, slots=True)
+class BodySpec:
+    """Whole-aircraft coefficient table about the center of mass, in the published convention.
+
+    ``deflection_map`` has one row per generalized control (aileron, elevator, rudder) and one
+    column per surface, forming those angles from the physical surface deflections.
+    """
+
+    lift: LongitudinalCoefficientSpec
+    drag: DragCoefficientSpec
+    side: LateralCoefficientSpec
+    roll: LateralCoefficientSpec
+    pitch: LongitudinalCoefficientSpec
+    yaw: LateralCoefficientSpec
+    stall_angle_rad: float
+    stall_width_rad: float
+    normal_force_coefficient: float
+    pitch_flat_plate: float
+    deflection_map: tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        rows = tuple(tuple(float(value) for value in row) for row in data["deflection_map"])
+        if len(rows) != 3:
+            raise SpecError("body.deflection_map must contain three rows")
+        return cls(
+            lift=LongitudinalCoefficientSpec(**_floats(data["lift"])),
+            drag=DragCoefficientSpec(**_floats(data["drag"])),
+            side=LateralCoefficientSpec(**_floats(data["side"])),
+            roll=LateralCoefficientSpec(**_floats(data["roll"])),
+            pitch=LongitudinalCoefficientSpec(**_floats(data["pitch"])),
+            yaw=LateralCoefficientSpec(**_floats(data["yaw"])),
+            stall_angle_rad=float(data["stall_angle_rad"]),
+            stall_width_rad=float(data["stall_width_rad"]),
+            normal_force_coefficient=float(data["normal_force_coefficient"]),
+            pitch_flat_plate=float(data["pitch_flat_plate"]),
+            deflection_map=rows,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "lift": asdict(self.lift),
+            "drag": asdict(self.drag),
+            "side": asdict(self.side),
+            "roll": asdict(self.roll),
+            "pitch": asdict(self.pitch),
+            "yaw": asdict(self.yaw),
+            "stall_angle_rad": self.stall_angle_rad,
+            "stall_width_rad": self.stall_width_rad,
+            "normal_force_coefficient": self.normal_force_coefficient,
+            "pitch_flat_plate": self.pitch_flat_plate,
+            "deflection_map": _lists(self.deflection_map),
+        }
+
+    def to_model(self) -> BodyModel:
+        return BodyModel(
+            lift=_longitudinal(self.lift),
+            drag=DragCoefficients(
+                zero=jnp.asarray(self.drag.zero),
+                alpha=jnp.asarray(self.drag.alpha_rad),
+                alpha_sq=jnp.asarray(self.drag.alpha_sq_rad2),
+                beta=jnp.asarray(self.drag.beta_rad),
+                beta_sq=jnp.asarray(self.drag.beta_sq_rad2),
+                q=jnp.asarray(self.drag.q),
+                elevator_sq=jnp.asarray(self.drag.elevator_sq_rad2),
+            ),
+            side=_lateral(self.side),
+            roll=_lateral(self.roll),
+            pitch=_longitudinal(self.pitch),
+            yaw=_lateral(self.yaw),
+            stall_angle=jnp.asarray(self.stall_angle_rad),
+            stall_width=jnp.asarray(self.stall_width_rad),
+            normal_force_coefficient=jnp.asarray(self.normal_force_coefficient),
+            pitch_flat_plate=jnp.asarray(self.pitch_flat_plate),
+            deflection_map=jnp.asarray(self.deflection_map),
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class AircraftSpec:
     name: str
     description: str
@@ -119,6 +235,7 @@ class AircraftSpec:
     control_channels: tuple[str, ...]
     surfaces: tuple[SurfaceSpec, ...]
     propellers: tuple[PropellerSpec, ...]
+    body: BodySpec | None = None
     schema_version: int = SCHEMA_VERSION
 
     def validate(self) -> Self:
@@ -145,6 +262,12 @@ class AircraftSpec:
                     f"propeller {propeller.name!r} has {len(propeller.slipstream_weights)} "
                     f"slipstream weights; expected {len(self.surfaces)}"
                 )
+        if self.body is not None:
+            for row in self.body.deflection_map:
+                if len(row) != len(self.surfaces):
+                    raise SpecError(
+                        f"body.deflection_map rows must have {len(self.surfaces)} entries"
+                    )
         return self
 
     def to_model(self) -> AircraftModel:
@@ -258,6 +381,7 @@ class AircraftSpec:
                 surfaces=surface_model,
                 propellers=propeller_model,
                 actuators=actuator_model,
+                body=zero_body(n_surface) if self.body is None else self.body.to_model(),
             )
         )
 
@@ -281,6 +405,7 @@ class AircraftSpec:
                 propellers=tuple(
                     PropellerSpec.from_dict(value) for value in data.get("propellers", [])
                 ),
+                body=BodySpec.from_dict(data["body"]) if "body" in data else None,
             )
         except (KeyError, TypeError, ValueError) as error:
             raise SpecError(f"invalid aircraft specification: {error}") from error
@@ -304,6 +429,7 @@ class AircraftSpec:
             "controls": {"channels": list(self.control_channels)},
             "surfaces": [surface.to_dict() for surface in self.surfaces],
             "propellers": [propeller.to_dict() for propeller in self.propellers],
+            **({} if self.body is None else {"body": self.body.to_dict()}),
         }
 
 
@@ -317,6 +443,30 @@ def save_aircraft_spec(spec: AircraftSpec, path: str | Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     with destination.open("wb") as output:
         tomli_w.dump(spec.to_dict(), output)
+
+
+def _floats(values: Any) -> dict[str, float]:
+    return {str(key): float(value) for key, value in dict(values).items()}
+
+
+def _longitudinal(spec: LongitudinalCoefficientSpec) -> LongitudinalCoefficients:
+    return LongitudinalCoefficients(
+        zero=jnp.asarray(spec.zero),
+        alpha=jnp.asarray(spec.alpha_rad),
+        q=jnp.asarray(spec.q),
+        elevator=jnp.asarray(spec.elevator_rad),
+    )
+
+
+def _lateral(spec: LateralCoefficientSpec) -> LateralCoefficients:
+    return LateralCoefficients(
+        zero=jnp.asarray(spec.zero),
+        beta=jnp.asarray(spec.beta_rad),
+        p=jnp.asarray(spec.p),
+        r=jnp.asarray(spec.r),
+        aileron=jnp.asarray(spec.aileron_rad),
+        rudder=jnp.asarray(spec.rudder_rad),
+    )
 
 
 def _vector(values: Any, length: int, name: str) -> tuple[float, ...]:

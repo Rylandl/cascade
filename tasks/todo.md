@@ -10,16 +10,16 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 - [x] `uv run pytest` and `uv run ruff check .` green; commit
 
 ## Phase 1: schema v2 physics
-- [ ] 1a flapped and all-moving surfaces (`all_moving_fraction`, `flap_effectiveness`, flap moment and drag)
-- [ ] 1b propeller `CT(J)` with momentum-theory induced velocity and `CT0 <= (pi/2) J0^2` bound
-- [ ] 1c whole-aircraft coefficient backend (`BodyModel`, `[body]` table, `deflection_map`, zero-area surfaces)
-- [ ] 1d channels as linear coordinates; `control_from_actuators`
-- [ ] Schema v2 in `spec.py`, fixture TOML converted, docs updated
-- [ ] Tests listed in the plan; un-xfail roll monotonicity; examples still run; commit
+- [x] 1a flapped and all-moving surfaces (`all_moving_fraction`, `flap_effectiveness`, flap moment and drag)
+- [x] 1b propeller `CT(J)` with momentum-theory induced velocity and `CT0 <= (pi/2) J0^2` bound
+- [x] 1c whole-aircraft coefficient backend (`BodyModel`, `[body]` table, `deflection_map`, zero-area surfaces)
+- [x] 1d channels as linear coordinates; `control_from_actuators`
+- [x] Schema v2 in `spec.py`, fixture TOML converted, docs updated
+- [x] Tests listed in the plan; un-xfail roll monotonicity; examples still run; commit
 
 ## Phase 2: canonical conversion, plant, environment sequences
-- [ ] `cascade/canonical.py` with tests (no Glassbox import)
-- [ ] `rollout(environments=...)` time-major path with tests
+- [x] `cascade/canonical.py` with tests (no Glassbox import)
+- [x] `rollout(environments=...)` time-major path with tests
 - [ ] `cascade/plant.py` with tests; exports; README and architecture doc; commit
 
 ## Phase 3: Skywalker X8 spec from the published model

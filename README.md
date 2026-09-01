@@ -13,13 +13,16 @@ the same pure functional core.
 - **Full-envelope by construction.** Aerodynamic functions remain finite through stall, inverted
   flight, sideways flow, and near-zero airspeed.
 - **Component aerodynamics.** Wings, tails, and control surfaces see their own local flow, including
-  body rotation and propeller slipstream.
+  body rotation and propeller slipstream. Flapped and all-moving controls are distinct.
+- **Published models drop in.** A whole-aircraft coefficient table in the classical polynomial
+  form can describe an airframe alone or alongside components, blended to a flat plate past stall.
 - **Dynamics, not animation.** Actuator lag, rate limits, propeller dynamics, and continuous flow-
   separation states are part of the simulated state.
 - **JAX-native.** State and model objects are PyTrees; stepping, batching, differentiation, and
   rollouts compose with `jax.jit`, `jax.vmap`, `jax.grad`, and `jax.lax.scan`.
 - **Explicit conventions.** Physics uses right-handed NED world axes and FRD body axes. Rendering
-  adapters must perform their coordinate conversion at the boundary.
+  and identification adapters convert at the boundary; `cascade.canonical` provides the NWU/FLU
+  scalar-first 13-vector state used by Glassbox-style tooling.
 - **Airframe-specific truth.** The engine is reusable, but high-alpha parameters and residuals are
   expected to be identified for each airframe.
 
