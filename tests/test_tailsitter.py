@@ -49,10 +49,12 @@ def test_spec_loads_with_two_washed_elevons_and_counter_rotating_motors():
 
     assert spec.control_channels == ("aileron", "elevator")
     assert model.n_propellers == 2
+    assert model.n_surfaces == 6
     assert float(model.propellers.spin_direction[0]) == -float(model.propellers.spin_direction[1])
-    # Each motor washes its own wing half strongly and nothing on the other side.
+    # Each motor washes its own inboard panel strongly, nothing outboard or on the other side.
     assert float(model.propellers.slipstream_map[0, 0]) > 1.0
     assert float(model.propellers.slipstream_map[0, 1]) == 0.0
+    assert float(model.propellers.slipstream_map[0, 2]) == 0.0
     assert float(model.propellers.slipstream_map[1, 1]) > 1.0
 
 
