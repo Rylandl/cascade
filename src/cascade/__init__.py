@@ -14,6 +14,12 @@ from cascade.analysis import (
     trim_straight_flight,
 )
 from cascade.dynamics import DynamicsResult, derivative, evaluate_dynamics
+from cascade.gusts import (
+    DrydenParameters,
+    dryden_environment_sequence,
+    dryden_low_altitude,
+    dryden_wind_sequence,
+)
 from cascade.initialization import (
     control_from_array,
     control_to_array,
@@ -37,6 +43,8 @@ from cascade.reference import (
     aerobatic_reference,
     aerobatic_reference_spec,
     skywalker_x8,
+    skywalker_x8_panels,
+    skywalker_x8_panels_spec,
     skywalker_x8_spec,
 )
 from cascade.spec import (
@@ -63,6 +71,7 @@ __all__ = [
     "BodySpec",
     "ControlInput",
     "DragCoefficientSpec",
+    "DrydenParameters",
     "DynamicsResult",
     "Environment",
     "LateralCoefficientSpec",
@@ -88,6 +97,9 @@ __all__ = [
     "control_from_array",
     "control_to_array",
     "derivative",
+    "dryden_environment_sequence",
+    "dryden_low_altitude",
+    "dryden_wind_sequence",
     "equilibrate_internal_state",
     "euler_step",
     "evaluate_dynamics",
@@ -98,6 +110,8 @@ __all__ = [
     "rollout",
     "save_aircraft_spec",
     "skywalker_x8",
+    "skywalker_x8_panels",
+    "skywalker_x8_panels_spec",
     "skywalker_x8_spec",
     "stability_modes",
     "standard_environment",

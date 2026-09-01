@@ -39,7 +39,7 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 - [x] Validation rerun: best 0.677 vs persistence (CG +50 mm, 4 kg, inertia x2, half vertical wind)
 
 ## Phase 5 (follow-on)
-- [ ] Component-panel X8 fitted to the coefficient backend; rate-derivative comparison (agent in progress)
+- [x] Component-panel X8 fitted to the coefficient backend; rate derivatives predicted from geometry (docs/skywalker-x8.md)
 - [x] Dryden gust sequences (`cascade.gusts`) with tests and docs (export added with the panel integration)
 
 ## Review (2026-09-01)

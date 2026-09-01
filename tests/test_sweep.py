@@ -53,3 +53,18 @@ def test_aerodynamic_sweep_is_differentiable_in_angle_of_attack():
     jacobian = jax.jacfwd(force_coefficient)(jnp.array(0.1))
     assert jacobian.shape == (3,)
     assert jnp.all(jnp.isfinite(jacobian))
+
+
+def test_pitch_rate_damps_the_pitching_moment_of_the_aerobatic_reference():
+    model = aerobatic_reference()
+    alpha = jnp.deg2rad(jnp.array(3.0))
+    baseline = aerodynamic_sweep(model, alpha, airspeed_m_s=15.0)
+    pitching = aerodynamic_sweep(
+        model,
+        alpha,
+        airspeed_m_s=15.0,
+        angular_velocity_rad_s=jnp.array([0.0, 1.0, 0.0]),
+    )
+
+    # A positive pitch rate should add a damping (nose-down, negative) increment to C_m.
+    assert pitching.moment_coefficient_body[1] < baseline.moment_coefficient_body[1]

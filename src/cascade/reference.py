@@ -45,3 +45,22 @@ def skywalker_x8() -> AircraftModel:
     """Compile the packaged Skywalker X8 specification into a numerical model."""
 
     return skywalker_x8_spec().to_model()
+
+
+def skywalker_x8_panels_spec() -> AircraftSpec:
+    """Load the packaged component-panel Skywalker X8 specification.
+
+    This is a from-geometry component model (no ``[body]`` table): a center body panel, swept
+    inboard and outboard panels per side with elevons on the outer panels, and tip winglets acting
+    as vertical stabilizers. Its static coefficients are fitted by ``scripts/fit_x8_panels.py`` to
+    reproduce ``skywalker_x8_spec()``'s published static polynomial; its rate derivatives are not
+    fitted and are geometry predictions. See ``docs/skywalker-x8.md``.
+    """
+
+    return _packaged_spec("skywalker_x8_panels.toml")
+
+
+def skywalker_x8_panels() -> AircraftModel:
+    """Compile the packaged component-panel Skywalker X8 specification into a numerical model."""
+
+    return skywalker_x8_panels_spec().to_model()

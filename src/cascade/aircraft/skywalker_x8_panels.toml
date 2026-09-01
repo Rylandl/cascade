@@ -1,0 +1,439 @@
+schema_version = 2
+name = "skywalker-x8-panels"
+description = "Skywalker X8 flying wing assembled from component surfaces (no [body] table). Geometry: span 2.1 m, reference area 0.75 m2, MAC 0.357 m, 30 deg leading-edge/quarter-chord sweep, CG ~0.44 m aft of the nose, elevons on the outer panels, large tip winglets acting as vertical stabilizers (Gryte et al. ICUAS 2018; Winter et al. EUCASS 2019; Reinhardt et al. ICUAS 2022). Mass, inertia, reference block, and propeller are copied from skywalker_x8.toml. Static per-panel coefficients are fitted by scripts/fit_x8_panels.py to reproduce the published body-block static polynomial (Gryte et al. wind-tunnel column); positions and all rate-affecting quantities are geometry, not fitted, so C_lp, C_mq, C_nr, C_Lq, C_Yp, C_Yr, C_lr, C_np are predictions to compare against the published XFLR5 values. See docs/skywalker-x8.md for the fit residuals and rate-derivative comparison. Fit residual RMS: CX 0.0075, CY 0.0111, CZ 0.0293, Cl 0.0103, Cm 0.0149, Cn 0.0017."
+
+[rigid_body]
+mass_kg = 3.364
+inertia_kg_m2 = [
+    [
+        0.335,
+        0.0,
+        -0.029,
+    ],
+    [
+        0.0,
+        0.14,
+        0.0,
+    ],
+    [
+        -0.029,
+        0.0,
+        0.4,
+    ],
+]
+
+[reference]
+area_m2 = 0.75
+chord_m = 0.357
+span_m = 2.1
+
+[controls]
+channels = [
+    "aileron",
+    "elevator",
+]
+
+[[surfaces]]
+name = "center_body"
+position_m = [
+    0.02,
+    0.0,
+    0.0,
+]
+body_from_surface = [
+    [
+        1.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        1.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+]
+area_m2 = 0.3
+chord_m = 0.55
+lift_coefficient_zero = 0.2340906661730515
+lift_curve_slope_rad = 6.283185307179575
+drag_coefficient_zero = 0.01837135562301525
+induced_drag_factor = 0.04685899914573803
+moment_coefficient_zero = 0.044875978214501344
+moment_coefficient_alpha_rad = 1.4779831992627643
+stall_angle_rad = 0.2617993877991494
+stall_width_rad = 0.04363323129985824
+normal_force_coefficient = 1.75
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.12
+separation_time_constant_s = 0.08
+reattachment_time_constant_s = 0.16
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [
+    0.0,
+    0.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[surfaces]]
+name = "left_inner"
+position_m = [
+    -0.25,
+    -0.47,
+    0.0,
+]
+body_from_surface = [
+    [
+        0.8660254037844387,
+        0.5,
+        0.0,
+    ],
+    [
+        -0.5,
+        0.8660254037844387,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+]
+area_m2 = 0.14
+chord_m = 0.4
+lift_coefficient_zero = -0.024163700023869833
+lift_curve_slope_rad = 4.4350587466834765
+drag_coefficient_zero = 0.018932290834526487
+induced_drag_factor = 0.04821076539016101
+moment_coefficient_zero = 0.027805622789806576
+moment_coefficient_alpha_rad = 0.6996976075015142
+stall_angle_rad = 0.2617993877991494
+stall_width_rad = 0.04363323129985824
+normal_force_coefficient = 1.75
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.12
+separation_time_constant_s = 0.08
+reattachment_time_constant_s = 0.16
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [
+    0.0,
+    0.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[surfaces]]
+name = "right_inner"
+position_m = [
+    -0.25,
+    0.47,
+    0.0,
+]
+body_from_surface = [
+    [
+        0.8660254037844387,
+        -0.5,
+        0.0,
+    ],
+    [
+        0.5,
+        0.8660254037844387,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+]
+area_m2 = 0.14
+chord_m = 0.4
+lift_coefficient_zero = -0.024163700023869833
+lift_curve_slope_rad = 4.4350587466834765
+drag_coefficient_zero = 0.018932290834526487
+induced_drag_factor = 0.04821076539016101
+moment_coefficient_zero = 0.027805622789806576
+moment_coefficient_alpha_rad = 0.6996976075015142
+stall_angle_rad = 0.2617993877991494
+stall_width_rad = 0.04363323129985824
+normal_force_coefficient = 1.75
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.12
+separation_time_constant_s = 0.08
+reattachment_time_constant_s = 0.16
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [
+    0.0,
+    0.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[surfaces]]
+name = "left_outer"
+position_m = [
+    -0.47,
+    -0.85,
+    0.0,
+]
+body_from_surface = [
+    [
+        0.8660254037844387,
+        0.5,
+        0.0,
+    ],
+    [
+        -0.5,
+        0.8660254037844387,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+]
+area_m2 = 0.075
+chord_m = 0.22
+lift_coefficient_zero = 0.07059525331556919
+lift_curve_slope_rad = 2.4333352177477243
+drag_coefficient_zero = 0.01931041526750297
+induced_drag_factor = 0.049318780263792036
+moment_coefficient_zero = 0.00819291176451735
+moment_coefficient_alpha_rad = 0.17089303551899626
+stall_angle_rad = 0.2617993877991494
+stall_width_rad = 0.04363323129985824
+normal_force_coefficient = 1.75
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.12
+separation_time_constant_s = 0.08
+reattachment_time_constant_s = 0.16
+all_moving_fraction = 0.0
+flap_effectiveness = 0.5755186075691262
+moment_coefficient_flap_rad = 0.026406640010539956
+drag_coefficient_flap_rad2 = 0.07931527651043474
+control_map_rad = [
+    1.0,
+    1.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[surfaces]]
+name = "right_outer"
+position_m = [
+    -0.47,
+    0.85,
+    0.0,
+]
+body_from_surface = [
+    [
+        0.8660254037844387,
+        -0.5,
+        0.0,
+    ],
+    [
+        0.5,
+        0.8660254037844387,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+]
+area_m2 = 0.075
+chord_m = 0.22
+lift_coefficient_zero = 0.07059525331556919
+lift_curve_slope_rad = 2.4333352177477243
+drag_coefficient_zero = 0.01931041526750297
+induced_drag_factor = 0.049318780263792036
+moment_coefficient_zero = 0.00819291176451735
+moment_coefficient_alpha_rad = 0.17089303551899626
+stall_angle_rad = 0.2617993877991494
+stall_width_rad = 0.04363323129985824
+normal_force_coefficient = 1.75
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.12
+separation_time_constant_s = 0.08
+reattachment_time_constant_s = 0.16
+all_moving_fraction = 0.0
+flap_effectiveness = 0.5755186075691262
+moment_coefficient_flap_rad = 0.026406640010539956
+drag_coefficient_flap_rad2 = 0.07931527651043474
+control_map_rad = [
+    -1.0,
+    1.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[surfaces]]
+name = "left_winglet"
+position_m = [
+    -0.59,
+    -1.05,
+    -0.05,
+]
+body_from_surface = [
+    [
+        1.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+    [
+        0.0,
+        -1.0,
+        0.0,
+    ],
+]
+area_m2 = 0.01
+chord_m = 0.12
+lift_coefficient_zero = 0.0
+lift_curve_slope_rad = 4.623561466366483
+drag_coefficient_zero = 0.01987395281796163
+induced_drag_factor = 0.05
+moment_coefficient_zero = 0.0
+moment_coefficient_alpha_rad = 0.0
+stall_angle_rad = 0.3490658503988659
+stall_width_rad = 0.06981317007977318
+normal_force_coefficient = 1.45
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.35
+separation_time_constant_s = 0.06
+reattachment_time_constant_s = 0.12
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [
+    0.0,
+    0.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[surfaces]]
+name = "right_winglet"
+position_m = [
+    -0.59,
+    1.05,
+    -0.05,
+]
+body_from_surface = [
+    [
+        1.0,
+        0.0,
+        0.0,
+    ],
+    [
+        0.0,
+        0.0,
+        1.0,
+    ],
+    [
+        0.0,
+        -1.0,
+        0.0,
+    ],
+]
+area_m2 = 0.01
+chord_m = 0.12
+lift_coefficient_zero = 0.0
+lift_curve_slope_rad = 4.623561466366483
+drag_coefficient_zero = 0.01987395281796163
+induced_drag_factor = 0.05
+moment_coefficient_zero = 0.0
+moment_coefficient_alpha_rad = 0.0
+stall_angle_rad = 0.3490658503988659
+stall_width_rad = 0.06981317007977318
+normal_force_coefficient = 1.45
+edge_drag_coefficient = 0.06
+span_drag_coefficient = 0.35
+separation_time_constant_s = 0.06
+reattachment_time_constant_s = 0.12
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [
+    0.0,
+    0.0,
+]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.7
+actuator_time_constant_s = 0.04
+actuator_rate_limit_rad_s = 3.5
+
+[[propellers]]
+name = "throttle"
+position_m = [
+    -0.25,
+    0.0,
+    0.0,
+]
+direction_body = [
+    1.0,
+    0.0,
+    0.0,
+]
+diameter_m = 0.36
+thrust_map = [
+    [
+        0.0,
+        0.06748643,
+        -0.0006492625,
+    ],
+    [
+        0.04676505,
+        -0.0008998191,
+        4.328417e-06,
+    ],
+]
+torque_coefficient_static = 0.0045
+spin_direction = 1.0
+slipstream_weights = [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+]
+speed_min_rad_s = 0.0
+speed_max_rad_s = 942.478
+time_constant_s = 0.2
+acceleration_limit_rad_s2 = 5000.0

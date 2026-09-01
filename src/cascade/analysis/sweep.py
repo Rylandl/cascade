@@ -56,13 +56,16 @@ def aerodynamic_sweep(
     sideslip_rad: Array | float = 0.0,
     control: ControlInput | None = None,
     environment: Environment | None = None,
+    angular_velocity_rad_s: Array | None = None,
 ) -> AerodynamicSweep:
     """Evaluate arbitrary broadcastable air-angle grids in one batched dynamics call.
 
     Actuator and separation states are placed at their local equilibria. Force coefficients are
     ``[CX, CY, CZ]`` in body FRD; moment coefficients are ``[Cl, Cm, Cn]`` using reference span,
     chord, and span respectively. Propeller thrust is excluded, while its slipstream effect on the
-    aerodynamic surfaces is retained.
+    aerodynamic surfaces is retained. ``angular_velocity_rad_s`` optionally sets body FRD rates
+    ``[p, q, r]``, broadcastable to ``(*batch, 3)``, on the state before equilibration and
+    evaluation; the default ``None`` keeps the previous zero-rate behaviour identical.
     """
 
     environment = standard_environment() if environment is None else environment
@@ -90,6 +93,11 @@ def aerodynamic_sweep(
     state = state._replace(
         rigid_body=state.rigid_body._replace(velocity=air_velocity_body + environment.wind)
     )
+    if angular_velocity_rad_s is not None:
+        angular_velocity = jnp.broadcast_to(jnp.asarray(angular_velocity_rad_s), (*batch_shape, 3))
+        state = state._replace(
+            rigid_body=state.rigid_body._replace(angular_velocity=angular_velocity)
+        )
     state = equilibrate_internal_state(model, state, control, environment)
     result = evaluate_dynamics(model, state, control, environment)
 
