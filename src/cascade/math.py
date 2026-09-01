@@ -111,3 +111,43 @@ def rotation_y(angle: Array) -> Array:
 
 def matvec(matrix: Array, vector: Array) -> Array:
     return jnp.einsum("...ij,...j->...i", matrix, vector)
+
+
+def quaternion_from_matrix(rotation: Array) -> Array:
+    """Scalar-last quaternion of a proper rotation matrix, stable in every quadrant.
+
+    Uses the branch-free form: the four candidate magnitudes from the diagonal are computed at
+    once and the largest one is used as the divisor, which keeps gradients finite everywhere.
+    """
+
+    m00, m01, m02 = rotation[..., 0, 0], rotation[..., 0, 1], rotation[..., 0, 2]
+    m10, m11, m12 = rotation[..., 1, 0], rotation[..., 1, 1], rotation[..., 1, 2]
+    m20, m21, m22 = rotation[..., 2, 0], rotation[..., 2, 1], rotation[..., 2, 2]
+    trace = m00 + m11 + m22
+    # Squared magnitudes of (x, y, z, w), each valid; the largest is well conditioned.
+    squares = jnp.stack(
+        (
+            1.0 + m00 - m11 - m22,
+            1.0 - m00 + m11 - m22,
+            1.0 - m00 - m11 + m22,
+            1.0 + trace,
+        ),
+        axis=-1,
+    )
+    largest = jnp.argmax(squares, axis=-1)
+    selected = jnp.take_along_axis(squares, largest[..., None], -1)[..., 0]
+    magnitude = 0.5 * jnp.sqrt(jnp.maximum(selected, 1e-12))
+    inverse = 0.25 / magnitude
+    xy, xz, yz = (m01 + m10) * inverse, (m02 + m20) * inverse, (m12 + m21) * inverse
+    wx, wy, wz = (m21 - m12) * inverse, (m02 - m20) * inverse, (m10 - m01) * inverse
+    candidates = jnp.stack(
+        (
+            jnp.stack((magnitude, xy, xz, wx), -1),
+            jnp.stack((xy, magnitude, yz, wy), -1),
+            jnp.stack((xz, yz, magnitude, wz), -1),
+            jnp.stack((wx, wy, wz, magnitude), -1),
+        ),
+        axis=-2,
+    )
+    quaternion = jnp.take_along_axis(candidates, largest[..., None, None], -2)[..., 0, :]
+    return normalize(quaternion)
