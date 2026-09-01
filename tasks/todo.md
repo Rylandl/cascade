@@ -65,3 +65,13 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 - [x] CI workflow (`-m "not px4_sitl and not crazyflow"`), README extras and Python range, repository URL
 - [ ] Full suite green in the fresh copy (running)
 - [ ] LICENSE (Ryland to choose); push branch when Ryland says so
+
+## Phase 6: control cascade and tailsitter flagship (started 2026-09-01)
+Direction: docs/architecture.md Milestone 3 and the thesis (fielded fixed-wing autonomy is VTOL
+fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated in the recap.
+- [ ] 6a `cascade/control.py`: rate PID, quaternion attitude P, airspeed/altitude/heading guidance,
+      rate-scheduled composition, `closed_loop_rollout`, gains tuned by step-response tests on the
+      aerobatic reference and the X8, gradient through gains (dev agent)
+- [ ] 6b `aircraft/tailsitter_reference.toml`: indoor-class twin-motor flying-wing tailsitter with
+      propwash over elevons; hover balance and zero-airspeed control authority checks (me)
+- [ ] 6c transition example: hover -> cruise -> hover under the cascade, differentiated end to end
