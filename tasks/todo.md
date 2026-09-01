@@ -59,3 +59,9 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
   implicate the EKF rate signals rather than any single coefficient.
 - Glassbox working tree had unrelated uncommitted edits (Crazyflow throw campaign) from another
   session; only the Cascade integration files were committed.
+
+## Glassbox readiness (branch `cascade-integration` in `~/projects/glassbox-cascade`)
+- [x] Isolated worktree with its own venv; `cascade-flight` from GitHub instead of `../cascade`
+- [x] CI workflow (`-m "not px4_sitl and not crazyflow"`), README extras and Python range, repository URL
+- [ ] Full suite green in the fresh copy (running)
+- [ ] LICENSE (Ryland to choose); push branch when Ryland says so
