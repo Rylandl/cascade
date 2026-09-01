@@ -120,17 +120,26 @@ def rollout(
     dt: float,
     *,
     step: StepFunction = rk4_step,
+    environments: Environment | None = None,
 ) -> tuple[AircraftState, AircraftState]:
-    """Scan a time-major control sequence, returning final and post-step trajectory states."""
+    """Scan a time-major control sequence, returning final and post-step trajectory states.
 
-    def scan_step(state: AircraftState, control: ControlInput):
-        next_state = step(model, state, control, environment, dt)
+    ``environments`` is an optional time-major ``Environment`` whose leaves have shape
+    ``(steps, *batch, ...)``, applied per interval exactly like ``controls``; when ``None``, the
+    per-world ``environment`` is held for every step.
+    """
+
+    def scan_step(state: AircraftState, inputs):
+        control, step_environment = inputs
+        active_environment = environment if step_environment is None else step_environment
+        next_state = step(model, state, control, active_environment, dt)
         return next_state, next_state
 
-    return jax.lax.scan(scan_step, initial_state, controls)
+    return jax.lax.scan(scan_step, initial_state, (controls, environments))
 
 
 def repeat_control(control: ControlInput, steps: int) -> ControlInput:
-    """Make a time-major constant control sequence for :func:`rollout`."""
+    """Repeat any PyTree, including a :class:`ControlInput` or :class:`Environment`, into a
+    time-major sequence for :func:`rollout`."""
 
     return jax.tree.map(lambda value: jnp.broadcast_to(value, (steps, *value.shape)), control)
