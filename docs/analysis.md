@@ -51,6 +51,30 @@ Pass a `control` to sweep control derivatives; channels are linear coordinates i
 specification chose, so a published model with radian-valued channels can be checked directly
 against its tables. `rollout` accepts a time-major `environments` sequence for gusts.
 
+## Gusts
+
+`cascade.gusts` generates Dryden continuous turbulence (MIL-F-8785C) as a time-major
+`Environment` sequence: a first-order longitudinal filter and second-order lateral and vertical
+filters driven by white noise, with time constants `L / V` from the length scales and the
+aircraft's nominal airspeed, rotated from a chosen heading into world NED and added to the mean
+wind. `dryden_low_altitude` gives the specification's intensities and length scales below about
+300 m from the altitude and the 20 ft wind speed. Realizations are pure functions of a PRNG key
+and broadcast over worlds, so every world in a batch can see its own gust history:
+
+```python
+import jax
+from cascade.gusts import dryden_environment_sequence, dryden_low_altitude
+
+parameters = dryden_low_altitude(altitude_m=50.0, wind_20ft_m_s=15.4)
+environments = dryden_environment_sequence(
+    jax.random.key(0), environment, steps=400, dt=0.01, airspeed_m_s=18.0, parameters=parameters
+)
+final, trajectory = cascade.rollout(model, state, controls, environment, 0.01, environments=environments)
+```
+
+Gusts are frozen-field wind histories, not a gust state coupled to the aircraft; a moving-air
+model that varies with position would replace the sequence, not the dynamics.
+
 ## Quaternion-safe local linearization
 
 `linearize_step` differentiates one complete integration step. Its state matrix uses 21 local

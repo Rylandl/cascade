@@ -43,7 +43,7 @@ The bundled aerobatic reference aircraft is intentionally an illustrative dynami
 `cascade.skywalker_x8()` is assembled from the published NTNU Skywalker X8 model with full
 provenance; its first validation against real flight, through Glassbox's X8 campaign adapter,
 is recorded in Glassbox's `docs/cascade-x8-validation.md` (unfitted, within the paper's stated
-CG uncertainty: 0.735 of kinematic persistence at 2 s, 1.44x the fitted effective model).
+CG and inertia uncertainty: 0.68 of kinematic persistence, 1.33x the fitted effective model).
 
 ## Minimal rollout
 
@@ -64,6 +64,9 @@ controls = cascade.repeat_control(control, steps=100)
 
 final_state, trajectory = jax.jit(cascade.rollout)(model, state, controls, environment, 0.01)
 ```
+
+`cascade.gusts` generates Dryden turbulence as a time-major environment sequence for
+`rollout`, with per-world realizations from a PRNG key.
 
 `cascade.Plant` wraps the same core as a stepped hidden plant for identification tooling: reset to
 a canonical state, hold one command per control interval, read back commanded and applied

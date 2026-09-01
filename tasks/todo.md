@@ -34,8 +34,13 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 - [x] `glassbox-x8 evaluate-cascade` with a (CG shift x mass x yaw damping x vertical wind) variant grid, reusing x8_evaluation's protocol helpers
 - [x] Opt-in tests; run the evaluation; record the result and the vertical-wind finding; commit
 
+## Phase 4 follow-ups (2026-09-01, Glassbox commit 6efdc5b)
+- [x] `diagnose-cascade` residual regressions; lag-aware actuator initialization; inertia-scale axis
+- [x] Validation rerun: best 0.677 vs persistence (CG +50 mm, 4 kg, inertia x2, half vertical wind)
+
 ## Phase 5 (follow-on)
-- [ ] Component-panel X8 fitted to the coefficient backend; `downwash_map` placeholder in docs
+- [ ] Component-panel X8 fitted to the coefficient backend; rate-derivative comparison (agent in progress)
+- [x] Dryden gust sequences (`cascade.gusts`) with tests and docs (export added with the panel integration)
 
 ## Review (2026-09-01)
 
