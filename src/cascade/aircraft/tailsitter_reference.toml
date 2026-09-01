@@ -1,0 +1,172 @@
+schema_version = 2
+name = "cascade-tailsitter-reference"
+description = "Illustrative indoor-class twin-motor flying-wing tailsitter; plausible software fixture for hover, transition, and cruise, not an identified vehicle."
+
+# A 100 g, 0.5 m span flying wing with two counter-rotating tractor propellers on the leading
+# edge whose slipstream washes the elevons, so pitch and roll authority exist at zero airspeed.
+# In hover the body x axis points up: thrust carries the weight, elevons in the propwash give
+# body pitch and roll, and differential thrust gives body yaw. Numbers are chosen to be plausible
+# for a 1S micro airframe (wing loading 1.3 kg/m^2, stall about 5 m/s, hover thrust-to-weight 1.6).
+
+[rigid_body]
+mass_kg = 0.1
+inertia_kg_m2 = [
+  [0.0015, 0.0, 0.0],
+  [0.0, 0.0003, 0.0],
+  [0.0, 0.0, 0.0018],
+]
+
+[reference]
+area_m2 = 0.075
+chord_m = 0.15
+span_m = 0.5
+
+[controls]
+channels = ["aileron", "elevator"]
+
+[[surfaces]]
+name = "left_wing"
+position_m = [-0.01, -0.13, 0.0]
+body_from_surface = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+area_m2 = 0.0375
+chord_m = 0.15
+lift_coefficient_zero = 0.05
+lift_curve_slope_rad = 4.0
+drag_coefficient_zero = 0.03
+induced_drag_factor = 0.09
+moment_coefficient_zero = 0.02
+moment_coefficient_alpha_rad = 0.0
+stall_angle_rad = 0.21
+stall_width_rad = 0.05
+normal_force_coefficient = 1.8
+edge_drag_coefficient = 0.08
+span_drag_coefficient = 0.15
+separation_time_constant_s = 0.05
+reattachment_time_constant_s = 0.1
+all_moving_fraction = 0.0
+flap_effectiveness = 0.6
+moment_coefficient_flap_rad = -0.5
+drag_coefficient_flap_rad2 = 0.08
+control_map_rad = [0.5, 0.5]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.6
+actuator_time_constant_s = 0.03
+actuator_rate_limit_rad_s = 15.0
+
+[[surfaces]]
+name = "right_wing"
+position_m = [-0.01, 0.13, 0.0]
+body_from_surface = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+area_m2 = 0.0375
+chord_m = 0.15
+lift_coefficient_zero = 0.05
+lift_curve_slope_rad = 4.0
+drag_coefficient_zero = 0.03
+induced_drag_factor = 0.09
+moment_coefficient_zero = 0.02
+moment_coefficient_alpha_rad = 0.0
+stall_angle_rad = 0.21
+stall_width_rad = 0.05
+normal_force_coefficient = 1.8
+edge_drag_coefficient = 0.08
+span_drag_coefficient = 0.15
+separation_time_constant_s = 0.05
+reattachment_time_constant_s = 0.1
+all_moving_fraction = 0.0
+flap_effectiveness = 0.6
+moment_coefficient_flap_rad = -0.5
+drag_coefficient_flap_rad2 = 0.08
+control_map_rad = [-0.5, 0.5]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.6
+actuator_time_constant_s = 0.03
+actuator_rate_limit_rad_s = 15.0
+
+[[surfaces]]
+name = "left_winglet"
+position_m = [-0.06, -0.25, -0.02]
+body_from_surface = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
+area_m2 = 0.005
+chord_m = 0.08
+lift_coefficient_zero = 0.0
+lift_curve_slope_rad = 3.0
+drag_coefficient_zero = 0.03
+induced_drag_factor = 0.15
+moment_coefficient_zero = 0.0
+moment_coefficient_alpha_rad = 0.0
+stall_angle_rad = 0.3
+stall_width_rad = 0.07
+normal_force_coefficient = 1.4
+edge_drag_coefficient = 0.08
+span_drag_coefficient = 0.3
+separation_time_constant_s = 0.05
+reattachment_time_constant_s = 0.1
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [0.0, 0.0]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.0
+actuator_time_constant_s = 0.03
+actuator_rate_limit_rad_s = 15.0
+
+[[surfaces]]
+name = "right_winglet"
+position_m = [-0.06, 0.25, -0.02]
+body_from_surface = [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]]
+area_m2 = 0.005
+chord_m = 0.08
+lift_coefficient_zero = 0.0
+lift_curve_slope_rad = 3.0
+drag_coefficient_zero = 0.03
+induced_drag_factor = 0.15
+moment_coefficient_zero = 0.0
+moment_coefficient_alpha_rad = 0.0
+stall_angle_rad = 0.3
+stall_width_rad = 0.07
+normal_force_coefficient = 1.4
+edge_drag_coefficient = 0.08
+span_drag_coefficient = 0.3
+separation_time_constant_s = 0.05
+reattachment_time_constant_s = 0.1
+all_moving_fraction = 0.0
+flap_effectiveness = 0.0
+moment_coefficient_flap_rad = 0.0
+drag_coefficient_flap_rad2 = 0.0
+control_map_rad = [0.0, 0.0]
+actuator_bias_rad = 0.0
+actuator_limit_rad = 0.0
+actuator_time_constant_s = 0.03
+actuator_rate_limit_rad_s = 15.0
+
+# Two 0.1 m counter-rotating propellers on the leading edge, each washing its own wing half.
+# Linear C_T(J) with C_T0 0.09 and J_0 0.6 (thrust map rows n, n^2; columns (V_a/D)^0..2).
+# Hover needs about 78% throttle; full throttle gives a thrust-to-weight ratio of 1.6.
+[[propellers]]
+name = "left_motor"
+position_m = [0.06, -0.12, 0.0]
+direction_body = [1.0, 0.0, 0.0]
+diameter_m = 0.1
+thrust_map = [[0.0, -0.15, 0.0], [0.09, 0.0, 0.0]]
+torque_coefficient_static = 0.008
+spin_direction = 1.0
+slipstream_weights = [1.8, 0.0, 0.6, 0.0]
+speed_min_rad_s = 0.0
+speed_max_rad_s = 1700.0
+time_constant_s = 0.05
+acceleration_limit_rad_s2 = 30000.0
+
+[[propellers]]
+name = "right_motor"
+position_m = [0.06, 0.12, 0.0]
+direction_body = [1.0, 0.0, 0.0]
+diameter_m = 0.1
+thrust_map = [[0.0, -0.15, 0.0], [0.09, 0.0, 0.0]]
+torque_coefficient_static = 0.008
+spin_direction = -1.0
+slipstream_weights = [0.0, 1.8, 0.0, 0.6]
+speed_min_rad_s = 0.0
+speed_max_rad_s = 1700.0
+time_constant_s = 0.05
+acceleration_limit_rad_s2 = 30000.0

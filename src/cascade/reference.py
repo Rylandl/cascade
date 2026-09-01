@@ -64,3 +64,20 @@ def skywalker_x8_panels() -> AircraftModel:
     """Compile the packaged component-panel Skywalker X8 specification into a numerical model."""
 
     return skywalker_x8_panels_spec().to_model()
+
+
+def tailsitter_reference_spec() -> AircraftSpec:
+    """Load the packaged illustrative twin-motor flying-wing tailsitter.
+
+    An indoor-class fixture whose propwash covers its elevons, so it has pitch and roll authority
+    at zero airspeed and can hover, transition, and cruise. Plausible numbers, not an identified
+    vehicle.
+    """
+
+    return _packaged_spec("tailsitter_reference.toml")
+
+
+def tailsitter_reference() -> AircraftModel:
+    """Compile the illustrative tailsitter into a numerical model."""
+
+    return tailsitter_reference_spec().to_model()
