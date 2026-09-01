@@ -29,13 +29,28 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 - [x] Trim gains a yaw-offset (sideslip) decision variable so rudderless aircraft balance yaw
 
 ## Phase 4: Glassbox integration and X8 replay validation
-- [ ] Glassbox `cascade` extra via uv path source; pytest marker
-- [ ] `glassbox/integrations/cascade.py` (plant adapter, `predict_windows`)
-- [ ] `x8_evaluation.score_predictor`; `glassbox-x8 evaluate-cascade` with variant matrix
-- [ ] Opt-in tests; run the evaluation; record the result and the vertical-wind finding; commit
+- [x] Glassbox `cascade` extra via uv path source; pytest marker
+- [x] `glassbox/integrations/cascade.py` (plant adapter, `predict_windows`)
+- [x] `glassbox-x8 evaluate-cascade` with a (CG shift x mass x yaw damping x vertical wind) variant grid, reusing x8_evaluation's protocol helpers
+- [x] Opt-in tests; run the evaluation; record the result and the vertical-wind finding; commit
 
 ## Phase 5 (follow-on)
 - [ ] Component-panel X8 fitted to the coefficient backend; `downwash_map` placeholder in docs
 
-## Review
-_(filled in at the end of each phase)_
+## Review (2026-09-01)
+
+- Cascade: 71 tests, ruff clean, five commits on `main` (baseline, Phase 0, Phase 1 x2, Phase 2 x2, Phase 3).
+- Physics changes beyond the plan, each forced by evidence: the propeller became a polynomial
+  thrust map because a linear C_T(J) could not represent the NTNU law (0.6 N RMS, negative J0);
+  flap effectiveness also shifts the separated flat-plate incidence because otherwise stalled
+  ailerons had no authority and the post-stall trim branch could not balance propeller torque;
+  the body block needed its own normal-force coefficient so an empty body is silent post-stall;
+  trim gained a yaw-offset variable because a rudderless wing balances aileron-induced yaw with
+  sideslip; the default trim seed moved to half throttle to avoid the windmilling valley.
+- Validation (Glassbox `docs/cascade-x8-validation.md`): published model as-is scores 2.77 vs
+  persistence (untrimmed, pitches away); with a 50 mm forward CG and a quarter of the campaign's
+  vertical wind it scores 0.735, 1.44x the fitted structured model. Findings: vertical wind about
+  0.4 of the estimate by lift balance; CG/wind trade; 2.7 N forward-force excess; rate residuals
+  implicate the EKF rate signals rather than any single coefficient.
+- Glassbox working tree had unrelated uncommitted edits (Crazyflow throw campaign) from another
+  session; only the Cascade integration files were committed.

@@ -39,8 +39,11 @@ uv run pytest
 uv run ruff check .
 ```
 
-The bundled reference aircraft is intentionally an illustrative dynamics fixture, not a validated
-real vehicle.
+The bundled aerobatic reference aircraft is intentionally an illustrative dynamics fixture.
+`cascade.skywalker_x8()` is assembled from the published NTNU Skywalker X8 model with full
+provenance; its first validation against real flight, through Glassbox's X8 campaign adapter,
+is recorded in Glassbox's `docs/cascade-x8-validation.md` (unfitted, within the paper's stated
+CG uncertainty: 0.735 of kinematic persistence at 2 s, 1.44x the fitted effective model).
 
 ## Minimal rollout
 
