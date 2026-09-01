@@ -72,6 +72,6 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
 - [ ] 6a `cascade/control.py`: rate PID, quaternion attitude P, airspeed/altitude/heading guidance,
       rate-scheduled composition, `closed_loop_rollout`, gains tuned by step-response tests on the
       aerobatic reference and the X8, gradient through gains (dev agent)
-- [ ] 6b `aircraft/tailsitter_reference.toml`: indoor-class twin-motor flying-wing tailsitter with
-      propwash over elevons; hover balance and zero-airspeed control authority checks (me)
+- [x] 6b `aircraft/tailsitter_reference.toml`: washed/clean panels, hover balance, zero-airspeed
+      authority, transition corridor with both trim branches (docs/tailsitter.md)
 - [ ] 6c transition example: hover -> cruise -> hover under the cascade, differentiated end to end
