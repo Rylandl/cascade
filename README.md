@@ -31,6 +31,15 @@ the roadmap. The [analysis guide](docs/analysis.md) covers trim, post-stall bran
 coefficient sweeps, and local linearization; [aircraft specifications](docs/aircraft-spec.md)
 documents the versioned TOML format.
 
+## Install
+
+```bash
+uv add "cascade-flight @ git+https://github.com/Rylandl/cascade"
+```
+
+or with pip, `pip install "cascade-flight @ git+https://github.com/Rylandl/cascade"`. Python 3.11
+to 3.13; the only runtime dependencies are JAX, SciPy, and tomli-w.
+
 ## Development
 
 ```bash
