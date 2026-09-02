@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from cascade.env import (
@@ -429,3 +430,58 @@ def test_observation_size_and_layout_match_the_vector(setup):
     assert obs[layout.surfaces].shape == (model.n_surfaces,)
     # Gravity direction is a unit vector in body axes.
     assert abs(float(jnp.linalg.norm(obs[layout.gravity])) - 1.0) < 1e-4
+
+
+def test_action_delay_applies_earlier_actions_and_randomises_per_episode(setup):
+    model, config, task, reference = setup
+    delayed = EpisodeConfig(horizon_steps=60, action_delay_steps=2)
+    state, _ = reset(model, delayed, task, reference, jax.random.PRNGKey(0))
+    trim_action = control_to_action(delayed, reference.control)
+    other = jnp.clip(trim_action + 0.3, -1.0, 1.0)
+    applied = []
+    for _ in range(4):
+        state, _, _, _, info = step(model, delayed, task, reference, state, other)
+        applied.append(info["applied_action"])
+    # Two periods of latency: the trim action reaches the actuators twice, then the command.
+    assert jnp.allclose(applied[0], trim_action) and jnp.allclose(applied[1], trim_action)
+    assert jnp.allclose(applied[2], other) and jnp.allclose(applied[3], other)
+
+    ranged = EpisodeConfig(horizon_steps=60, action_delay_range=(0, 3))
+    keys = jax.random.split(jax.random.PRNGKey(5), 32)
+    states, _ = jax.vmap(lambda k: reset(model, ranged, task, reference, k))(keys)
+    delays = np.asarray(states.action_delay)
+    assert delays.min() >= 0 and delays.max() <= 3 and len(set(delays.tolist())) > 1
+    assert states.action_buffer.shape == (32, 4, action_size_of(model))
+
+
+def action_size_of(model):
+    from cascade.env import action_size
+
+    return action_size(model)
+
+
+def _latency_crashes(model, task, reference, delay):
+    from cascade.control import aerobatic_reference_controller
+    from cascade.env import cascade_policy, rollout_policy
+
+    delayed = EpisodeConfig(horizon_steps=160, action_delay_steps=delay)
+    policy, policy_state = cascade_policy(
+        aerobatic_reference_controller(), model, delayed, task, reference
+    )
+    keys = jax.random.split(jax.random.PRNGKey(9), 8)
+    states, _ = jax.vmap(lambda k: reset(model, delayed, task, reference, k))(keys)
+    run = jax.jit(
+        jax.vmap(lambda s: rollout_policy(model, delayed, task, reference, s, policy, policy_state))
+    )
+    _, (observations, _, rewards, dones) = run(states)
+    assert jnp.all(jnp.isfinite(observations))
+    return int(dones[:, :-1].any(axis=1).sum()), float(jnp.mean(rewards[:, -40:]))
+
+
+def test_cascade_baseline_tolerates_a_period_of_latency_and_not_four(setup):
+    model, config, task, reference = setup
+    crashes_one, reward_one = _latency_crashes(model, task, reference, 1)
+    crashes_four, _ = _latency_crashes(model, task, reference, 4)
+    assert crashes_one == 0 and reward_one > 0.5
+    # A cascade tuned at zero delay is not latency-robust: 100 ms at 40 Hz crashes most of it.
+    assert crashes_four > crashes_one

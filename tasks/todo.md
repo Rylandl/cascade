@@ -204,11 +204,19 @@ weather; Glassbox the adaptation and the metric.
 - [x] 10g separated centre of pressure on component surfaces (`separated_center_of_pressure`,
       optional per surface, 0.25 flat plate in the archetypes, 0 in the packaged fixtures): the
       stall pitch break the review said panels lacked; validity stats unchanged (36/40, 38/40)
-## Phase 11: sim-to-real tooling (proposed)
-- [ ] action latency and jitter (mirror the observation delay), observation spec with an IMU block
-      and sensor-unit noise, named randomisation spec, failure-injection API, trajectory logging
-      with a versioned schema, ULog-to-canonical loader over Plant, 1-cos gust, shear, density
-      altitude, rotary gust components
+## Phase 11: sim-to-real tooling
+- [x] 11a action latency: `action_delay_steps` / per-episode `action_delay_range`, action buffer in
+      the state, `info["applied_action"]`. Finding: the hand-tuned aerobatic cascade at 40 Hz flies
+      with 25 ms, crashes 2/8 at 50 ms, 3/8 at 75 ms, 7/8 at 100 ms; at 100 Hz fine to 40 ms
+- [x] 11b `cascade.env.randomisation`: `randomisation(...)` ranges over named leaves plus a
+      centre-of-mass shift; `sample_models(model, spec, key, n)`; latency randomises through
+      `action_delay_range`
+- [ ] 11c observation spec (select blocks; IMU specific-force block; noise in sensor units)
+- [ ] 11d failure-injection API (time-indexed faults on surfaces and propellers: jam, hardover,
+      motor-out, partial power)
+- [ ] 11e trajectory logging with a versioned schema (npz) and a canonical-state replay over Plant
+- [ ] 11f weather: 1-cos discrete gust, shear, density altitude, rotary gust components; action
+      jitter and dropped frames
 ## Phase 12: the thesis harness (proposed, with Glassbox)
 - [ ] frozen two-archetype manifest with hashes and splits; shipped station-record weather set;
       flight-minutes-to-baseline metric; three baselines incl. a non-adaptive family-trained

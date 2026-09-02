@@ -47,7 +47,10 @@ class EpisodeConfig:
     reference with the listed standard deviations; the attitude perturbation is a body-frame
     rotation vector. ``observation_delay_steps`` returns the observation from that many control
     periods ago (the reset observation until the buffer fills), a latency the policy must live
-    with.
+    with. ``action_delay_steps`` applies the action commanded that many periods ago (the
+    reference action until the buffer fills): sense-to-actuate latency. ``action_delay_range``
+    draws the delay per episode, uniformly over the inclusive integer range, so latency is a
+    randomisable leaf; it overrides the fixed value.
     """
 
     simulation_frequency_hz: float = 400.0
@@ -61,6 +64,8 @@ class EpisodeConfig:
     crash_altitude_m: float = 0.0
     upright_limit_rad: float = 1.4
     observation_delay_steps: int = 0
+    action_delay_steps: int = 0
+    action_delay_range: tuple[int, int] | None = None
     step: StepFunction = rk4_step
 
     def __post_init__(self) -> None:
@@ -73,6 +78,18 @@ class EpisodeConfig:
             raise ValueError("horizon_steps must be positive")
         if self.observation_delay_steps < 0:
             raise ValueError("observation_delay_steps must be non-negative")
+        if self.action_delay_steps < 0:
+            raise ValueError("action_delay_steps must be non-negative")
+        if self.action_delay_range is not None:
+            low, high = self.action_delay_range
+            if low < 0 or high < low:
+                raise ValueError("action_delay_range must be 0 <= low <= high")
+
+    @property
+    def max_action_delay(self) -> int:
+        if self.action_delay_range is not None:
+            return int(self.action_delay_range[1])
+        return int(self.action_delay_steps)
 
     @property
     def substeps(self) -> int:
@@ -91,6 +108,8 @@ class EnvState(NamedTuple):
     observation_buffer: Array
     gust: Array
     wind_ned: Array
+    action_buffer: Array
+    action_delay: Array
 
 
 def current_environment(reference: ReferenceFlight, state: EnvState) -> Environment:
@@ -124,7 +143,9 @@ def reset(
     """
 
     noise = sensor_noise() if noise is None else noise
-    key, k_position, k_velocity, k_attitude, k_rate, k_bias, k_noise = jax.random.split(key, 7)
+    key, k_position, k_velocity, k_attitude, k_rate, k_bias, k_noise, k_delay = jax.random.split(
+        key, 8
+    )
     rigid = reference.state.rigid_body
     position = rigid.position + config.reset_position_std_m * jax.random.normal(k_position, (3,))
     if weather is None:
@@ -157,11 +178,23 @@ def reset(
         observation_buffer=jnp.zeros((config.observation_delay_steps + 1, white.shape[0])),
         gust=initial_gust_state(),
         wind_ned=wind,
+        action_buffer=jnp.broadcast_to(
+            control_to_action(config, reference.control),
+            (config.max_action_delay + 1, action_size(model)),
+        ),
+        action_delay=_draw_action_delay(config, k_delay),
     )
     sensed = _sense(model, task, reference, partial, white, k_noise)
     buffer = jnp.broadcast_to(sensed, partial.observation_buffer.shape)
     state = partial._replace(observation_buffer=buffer)
     return state, buffer[0]
+
+
+def _draw_action_delay(config: EpisodeConfig, key: Array) -> Array:
+    if config.action_delay_range is None:
+        return jnp.asarray(config.action_delay_steps, jnp.int32)
+    low, high = config.action_delay_range
+    return jax.random.randint(key, (), low, high + 1).astype(jnp.int32)
 
 
 def _sense(
@@ -292,14 +325,22 @@ def step(
     The returned observation carries the sensor ``noise`` (white noise drawn from the episode
     key, plus the bias drawn at reset) and the configured delay. With ``weather`` the wind
     for the period is the mean profile at the aircraft's altitude plus a Dryden gust advanced
-    from the episode key; without it the reference wind holds.
+    from the episode key; without it the reference wind holds. With an action delay the
+    action applied is an earlier one (``info["applied_action"]``); the cost still charges the
+    action commanded now.
 
     ``done`` is true on a crash (below ``crash_altitude_m``), on leaving the upright envelope
     (the body down axis more than ``upright_limit_rad`` from gravity), or at the horizon; the
     info dict separates ``crashed`` and ``truncated`` and reports the cost.
     """
 
-    control = action_to_control(model, config, action)
+    # The commanded action enters the buffer; the one applied is from ``action_delay``
+    # periods ago (index max_delay - delay, the buffer's oldest entry being the most delayed).
+    action_buffer = jnp.concatenate((state.action_buffer[1:], action[None]), axis=0)
+    applied = jax.lax.dynamic_index_in_dim(
+        action_buffer, config.max_action_delay - state.action_delay, axis=0, keepdims=False
+    )
+    control = action_to_control(model, config, applied)
     controls = repeat_control(control, config.substeps)
     environment = current_environment(reference, state)
     aircraft, _ = rollout(
@@ -336,11 +377,18 @@ def step(
             heading_rad=jnp.arctan2(air[..., 1], air[..., 0]),
         )
         wind = mean_wind_ned(weather, -rigid.position[..., 2]) + gust_ned
-    advanced = state._replace(aircraft=aircraft, step=next_step, key=key, gust=gust, wind_ned=wind)
+    advanced = state._replace(
+        aircraft=aircraft,
+        step=next_step,
+        key=key,
+        gust=gust,
+        wind_ned=wind,
+        action_buffer=action_buffer,
+    )
     sensed = _sense(model, task, reference, advanced, white, k_noise)
     buffer = jnp.concatenate((state.observation_buffer[1:], sensed[None]), axis=0)
     next_state = advanced._replace(observation_buffer=buffer)
-    info = {"cost": cost, "crashed": crashed, "truncated": truncated}
+    info = {"cost": cost, "crashed": crashed, "truncated": truncated, "applied_action": applied}
     return next_state, buffer[0], reward, crashed | truncated, info
 
 

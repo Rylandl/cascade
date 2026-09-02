@@ -65,6 +65,20 @@ reading from that many control periods ago. Both are pure functions of the episo
 noisy episode is still reproducible and differentiable; the true observation is always
 available from `observation`.
 
+## Latency
+
+`EpisodeConfig.action_delay_steps` applies the action commanded that many control periods
+ago, the sense-to-actuate latency a real stack has (one to three periods at 40 Hz is common);
+`action_delay_range` draws the delay per episode over an inclusive integer range, so latency
+is a randomisable leaf like mass or a coefficient. The state carries an action buffer that
+starts full of the reference action, `info["applied_action"]` reports what actually reached
+the actuators, and the cost charges the commanded action. A policy trained at zero delay
+oscillates on hardware; one trained across a range of delays does not, and this is where to
+show it. The hand-tuned aerobatic cascade illustrates the sensitivity on the 12 m/s tracking
+task from perturbed starts (8 episodes, 4 s): at 40 Hz it flies every episode with 25 ms of
+latency, crashes 2 with 50 ms, 3 with 75 ms, and 7 with 100 ms; at 100 Hz it flies every
+episode up to the 40 ms tested.
+
 ## Weather
 
 `reset` and `step` take an optional `WeatherCondition` (`cascade.env.weather`): a mean wind with a
@@ -99,6 +113,13 @@ On the aerobatic reference's 12 m/s tracking task from perturbed starts (2 m, 1 
 above 0.8 once settled.
 
 ## Domain randomisation
+
+`randomisation(mass=(0.8, 1.2), inertia=(0.7, 1.4), lift_curve_slope=(0.9, 1.1),
+surface_time_constant=(0.5, 2.0), thrust=(0.85, 1.15), center_of_mass_shift_m=(-0.02, 0.02))`
+is a reviewable spec of multiplicative ranges over named model leaves plus a centre-of-mass
+shift, and `sample_models(model, spec, key, n)` draws one factor per world per entry into a
+batched model. Any other leaf can be named directly (`"surfaces.stall_angle"`). The mechanism
+underneath is the one below, so hand-written updates still work:
 
 `reset` and `step` take the model as an argument, so a batch of models is a batch of worlds:
 `broadcast_model` the validated model to a leading batch shape, perturb leaves with indexed

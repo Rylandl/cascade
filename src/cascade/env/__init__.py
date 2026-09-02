@@ -26,6 +26,7 @@ from cascade.env.gusts import (
     dryden_low_altitude,
     dryden_wind_sequence,
 )
+from cascade.env.randomisation import Randomisation, randomisation, sample_models
 from cascade.env.sensors import SensorNoise, sensor_noise
 from cascade.env.tasks import (
     HoverTask,
@@ -58,6 +59,7 @@ __all__ = [
     "Family",
     "OBSERVATION_FIXED_SIZE",
     "ObservationLayout",
+    "Randomisation",
     "HoverTask",
     "Reference",
     "ReferenceFlight",
@@ -82,11 +84,13 @@ __all__ = [
     "observation",
     "observation_layout",
     "observation_size",
+    "randomisation",
     "reference_speed",
     "reset",
     "rollout_actions",
     "rollout_policy",
     "sample_family",
+    "sample_models",
     "sample_weather",
     "sample_weather_uniform",
     "sensor_noise",
