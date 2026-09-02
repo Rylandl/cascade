@@ -25,6 +25,7 @@ from cascade.control import (
     RateState,
     attitude_controller,
     channel_map,
+    coordinated_turn_rates,
     guidance_controller,
     rate_controller,
 )
@@ -242,6 +243,35 @@ def velocity_ramp_schedule(
     )
 
 
+def hover_azimuth_across_wind(
+    wind_ned: Array, preferred_azimuth_rad: Array, minimum_wind_m_s: float = 0.5
+) -> Array:
+    """Hover azimuth (belly direction) that puts the wing's span into the wind.
+
+    A tailsitter hovering broadside to the wind presents its whole wing as a flat plate, and
+    leaning into the wind exposes more of it; edge-on, the same wind is a small side load the
+    differential-thrust yaw loop holds easily. Of the two azimuths perpendicular to the wind
+    this returns the one nearer ``preferred_azimuth_rad`` (the heading the next transition will
+    use, say). Below ``minimum_wind_m_s`` the wind direction is meaningless and the preferred
+    azimuth is returned; the blend between the two is smooth in the wind speed.
+    """
+
+    north, east = wind_ned[..., 0], wind_ned[..., 1]
+    wind_direction = jnp.arctan2(east, north)
+    candidates = wind_direction[..., None] + jnp.array([0.5, -0.5]) * jnp.pi
+    offsets = jnp.arctan2(
+        jnp.sin(candidates - preferred_azimuth_rad[..., None]),
+        jnp.cos(candidates - preferred_azimuth_rad[..., None]),
+    )
+    nearer = jnp.argmin(jnp.abs(offsets), axis=-1)
+    across = (
+        preferred_azimuth_rad + jnp.take_along_axis(offsets, nearer[..., None], axis=-1)[..., 0]
+    )
+    speed = jnp.hypot(north, east)
+    weight = jax.nn.sigmoid((speed - minimum_wind_m_s) / (0.1 * minimum_wind_m_s))
+    return preferred_azimuth_rad + weight * (across - preferred_azimuth_rad)
+
+
 def trapezoid_speed_profile(
     steps: int,
     dt: float,
@@ -287,22 +317,22 @@ def speed_profile_schedule(
 ) -> HoverSetpoint:
     """Time-major hover setpoints that follow a commanded speed profile along a heading.
 
-    Position is the running integral of the profile from the start point, the belly faces the
-    heading, and the scheduled forward tilt is proportional to the commanded speed up to
-    ``tilt_at_cruise_rad``. Decelerating the profile through the transition controller's switch
-    airspeed hands the aircraft back to hover guidance, so a trapezoid profile flies a full
-    hover, cruise, hover round trip.
+    ``heading_rad`` is a scalar or a time-major profile. Position is the running integral of
+    the commanded velocity from the start point, the belly faces the heading, and the scheduled
+    forward tilt is proportional to the commanded speed up to ``tilt_at_cruise_rad``.
+    Decelerating the profile through the transition controller's switch airspeed hands the
+    aircraft back to hover guidance, so a trapezoid profile flies a full hover, cruise, hover
+    round trip, and a heading profile turns it in cruise.
     """
 
-    distance = jnp.cumsum(speed_m_s) * dt
-    along = jnp.stack(
-        (jnp.cos(heading_rad), jnp.sin(heading_rad), jnp.zeros_like(heading_rad)), axis=-1
-    )
     steps = speed_m_s.shape[0]
+    heading = jnp.broadcast_to(jnp.asarray(heading_rad), (steps,))
+    along = jnp.stack((jnp.cos(heading), jnp.sin(heading), jnp.zeros_like(heading)), axis=-1)
+    velocity = speed_m_s[:, None] * along
     return HoverSetpoint(
-        position_ned=start_position_ned + distance[:, None] * along,
-        velocity_ned=speed_m_s[:, None] * along,
-        azimuth_rad=jnp.broadcast_to(heading_rad, (steps,)),
+        position_ned=start_position_ned + jnp.cumsum(velocity, axis=0) * dt,
+        velocity_ned=velocity,
+        azimuth_rad=heading,
         tilt_forward_rad=tilt_at_cruise_rad * speed_m_s / cruise_speed_m_s,
     )
 
@@ -403,7 +433,13 @@ def transition_step(
     )
     measured = aircraft_state.rigid_body.attitude
     hover_rates = attitude_controller(controller.attitude, hover_attitude, measured)
-    forward_rates = attitude_controller(controller.attitude, forward_attitude, measured)
+    forward_rates = attitude_controller(
+        controller.attitude, forward_attitude, measured
+    ) + coordinated_turn_rates(
+        forward_attitude,
+        safe_norm(aircraft_state.rigid_body.velocity - environment.wind),
+        safe_norm(environment.gravity),
+    )
     rate_setpoint = (1.0 - weight[..., None]) * hover_rates + weight[..., None] * forward_rates
     throttle = (1.0 - weight[..., None]) * hover_throttle_command + weight[
         ..., None

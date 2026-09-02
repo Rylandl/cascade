@@ -127,9 +127,7 @@ def rate_controller(
     """
 
     error = rate_setpoint - rate_measured
-    integral = jnp.clip(
-        state.integral + error * dt, -gains.integral_limit, gains.integral_limit
-    )
+    integral = jnp.clip(state.integral + error * dt, -gains.integral_limit, gains.integral_limit)
     derivative = (error - state.previous_error) / dt
     output = (
         gains.kp * error
@@ -210,7 +208,8 @@ def guidance_controller(
     - Heading error (wrapped to ``[-pi, pi]``) feeds a proportional bank-angle command, saturated
       to ``bank_limit``. The attitude setpoint's yaw is set to the *current* measured yaw, not the
       commanded heading, so the attitude loop only closes roll and pitch and never fights the
-      heading loop directly; the bank angle alone produces the coordinated turn.
+      heading loop directly; the bank angle produces the turn, and
+      :func:`coordinated_turn_rates` feeds the matching body rates forward to the rate loop.
 
     There is no wind feedforward: crosswind or a headwind/tailwind shift is corrected only through
     the airspeed and heading errors it eventually causes.
@@ -244,19 +243,13 @@ def guidance_controller(
     speed_floor = jnp.maximum(airspeed, 3.0)
     stall_margin = jnp.maximum(setpoint.airspeed_m_s - airspeed, 0.0)
     pitch_command = (
-        gains.pitch_trim
-        + climb_rate_command / speed_floor
-        - gains.airspeed_pitch_kp * stall_margin
+        gains.pitch_trim + climb_rate_command / speed_floor - gains.airspeed_pitch_kp * stall_margin
     )
-    pitch_setpoint = jnp.clip(
-        pitch_command, gains.pitch_limits[..., 0], gains.pitch_limits[..., 1]
-    )
+    pitch_setpoint = jnp.clip(pitch_command, gains.pitch_limits[..., 0], gains.pitch_limits[..., 1])
 
     heading_measured = _yaw_from_quaternion(rigid_body.attitude)
     heading_error = _wrap_to_pi(setpoint.heading_rad - heading_measured)
-    bank_setpoint = jnp.clip(
-        gains.heading_kp * heading_error, -gains.bank_limit, gains.bank_limit
-    )
+    bank_setpoint = jnp.clip(gains.heading_kp * heading_error, -gains.bank_limit, gains.bank_limit)
 
     attitude_setpoint = quaternion_from_euler(bank_setpoint, pitch_setpoint, heading_measured)
     return attitude_setpoint, throttle, GuidanceState(airspeed_integral=airspeed_integral)
@@ -271,6 +264,24 @@ def _yaw_from_quaternion(attitude_xyzw: Array) -> Array:
 
     x, y, z, w = (attitude_xyzw[..., index] for index in range(4))
     return jnp.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
+
+
+def coordinated_turn_rates(
+    attitude_setpoint_xyzw: Array, airspeed_m_s: Array, gravity_m_s2: Array
+) -> Array:
+    """Body rates ``[0, q, r]`` of a coordinated level turn at the setpoint's bank angle.
+
+    A banked wing turns at ``g tan(phi) / V``; seen in body axes that is a pitch rate
+    ``sin(phi)`` and a yaw rate ``cos(phi)`` times the turn rate. Feeding these forward to the
+    rate loop keeps the yaw loop from fighting the turn and the pitch loop from letting the
+    nose drop into it. The airspeed is floored at 2 m/s so hover never sees a divergent rate.
+    """
+
+    x, y, z, w = (attitude_setpoint_xyzw[..., k] for k in range(4))
+    bank = jnp.arctan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+    turn_rate = gravity_m_s2 * jnp.tan(bank) / jnp.maximum(airspeed_m_s, 2.0)
+    zeros = jnp.zeros_like(bank)
+    return jnp.stack((zeros, turn_rate * jnp.sin(bank), turn_rate * jnp.cos(bank)), axis=-1)
 
 
 class CascadeController(NamedTuple):
@@ -360,6 +371,11 @@ def cascade_step(
 
     fresh_rate_setpoint = attitude_controller(
         controller.attitude, attitude_setpoint, aircraft_state.rigid_body.attitude
+    )
+    fresh_rate_setpoint = fresh_rate_setpoint + coordinated_turn_rates(
+        attitude_setpoint,
+        safe_norm(aircraft_state.rigid_body.velocity - environment.wind),
+        safe_norm(environment.gravity),
     )
     rate_setpoint = jnp.where(attitude_due, fresh_rate_setpoint, cascade_state.held_rate_setpoint)
 
@@ -461,9 +477,7 @@ def aerobatic_reference_controller() -> CascadeController:
         integral_limit=jnp.array([0.6, 0.6, 0.6]),
         feedforward=jnp.array([0.02, 0.02, 0.02]),
     )
-    attitude = AttitudeGains(
-        kp=jnp.array([4.0, 10.0, 3.0]), rate_limit=jnp.array([3.0, 4.0, 2.0])
-    )
+    attitude = AttitudeGains(kp=jnp.array([4.0, 10.0, 3.0]), rate_limit=jnp.array([3.0, 4.0, 2.0]))
     guidance = GuidanceGains(
         airspeed_kp=jnp.asarray(0.12),
         airspeed_ki=jnp.asarray(0.06),
@@ -524,9 +538,7 @@ def skywalker_x8_controller() -> CascadeController:
         integral_limit=jnp.array([0.3, 0.3, 0.3]),
         feedforward=jnp.array([0.02, 0.02, 0.0]),
     )
-    attitude = AttitudeGains(
-        kp=jnp.array([8.0, 3.0, 1.0]), rate_limit=jnp.array([4.0, 1.5, 1.0])
-    )
+    attitude = AttitudeGains(kp=jnp.array([8.0, 3.0, 1.0]), rate_limit=jnp.array([4.0, 1.5, 1.0]))
     guidance = GuidanceGains(
         airspeed_kp=jnp.asarray(0.08),
         airspeed_ki=jnp.asarray(0.03),

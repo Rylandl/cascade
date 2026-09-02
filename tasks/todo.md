@@ -96,5 +96,12 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       `TransitionController.differential_thrust` (rate-loop z command onto the motors). Gusty
       round trips (W20 2 and 4 m/s) survive; broadside hover in >= 2 m/s wind drifts because the
       plate drag is 40% of weight (hover edge-on instead; documented)
-- [ ] 6g heading change during cruise (the forward guidance heading loop under the transition
-      controller), then hover azimuth across the wind as a guidance rule
+- [x] 6g heading change in cruise: `speed_profile_schedule` takes a heading profile; a 90 deg ramp
+      over 3 s is tracked with ~1 s lag at 20 deg bank and the back-transition lands facing the new
+      heading (0.15 m). Added `coordinated_turn_rates` feedforward to the rate setpoint (cascade
+      and transition): without it the differential-thrust yaw loop fought the turn (0.08 split)
+      and the nose dropped 0.9 m. `hover_azimuth_across_wind` gives the edge-on hover azimuth.
+- [ ] 6h next candidates: an end-to-end gradient demo that tunes a transition schedule or gain
+      by gradient (the differentiability claim, exercised); a Gymnasium-style episode wrapper on
+      `Plant` for RL users; Glassbox re-evaluation of the X8 panels model after the post-stall
+      flap-moment change (campaign reaches alpha 20 deg)

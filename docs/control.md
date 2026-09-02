@@ -83,7 +83,7 @@ exactly as an amateur decoupled autopilot without a throttle/pitch energy mix wo
   ```
 
   so the attitude loop only ever closes roll and pitch and never fights the heading loop
-  directly — the bank angle alone produces the coordinated turn, the same way a human pilot
+  directly — the bank angle produces the turn, and `coordinated_turn_rates` feeds the pitch and yaw rates of a coordinated turn at that bank forward to the rate loop, so a yaw loop (a rudder, or a tailsitter's differential thrust) does not fight the turn and the nose does not drop into it, the same way a human pilot
   banks and lets the nose come around rather than stepping on the rudder to yaw toward a heading.
 
 There is no wind feedforward: a crosswind or head/tailwind shift is corrected only through the
@@ -271,7 +271,8 @@ with gradients.
   heading error it causes, never anticipated from a wind estimate.
 - **No attitude integrator.** A sustained bias in roll or pitch attitude is left to the rate
   loop's own integral term or to an updated trim; the attitude loop by itself does not remove it.
-- **The heading loop assumes a coordinated-turn airframe.** Yaw is not commanded directly (the
-  attitude setpoint's yaw tracks the vehicle's own current yaw); an airframe that does not turn
-  from bank alone (no dihedral effect, or an unusual configuration) will not turn well under this
-  guidance loop as written.
+- **The heading loop assumes a coordinated-turn airframe.** Heading is never turned into a yaw
+  command (the attitude setpoint's yaw tracks the vehicle's own current yaw); the rate loop only
+  receives the pitch and yaw rates of a coordinated turn at the commanded bank as feedforward.
+  An airframe that does not turn from bank (no dihedral effect, or an unusual configuration)
+  will not turn well under this guidance loop as written.

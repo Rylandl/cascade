@@ -71,6 +71,15 @@ The elevon never passes 0.4 of its travel. The whole rollout is one differentiab
 the ramp rates, the tilt schedule, or any gain can be tuned by gradient through both
 transitions.
 
+A heading profile in the same schedule turns the aircraft in cruise: a 90° ramp over 3 s is
+tracked with about a second of lag at 20° of bank, holds altitude within 0.3 m through the
+turn, and the back-transition then lands a hover facing the new heading within 0.15 m of the
+setpoint. Two details make that clean. The forward rate setpoint carries the coordinated-turn
+pitch and yaw rates for the commanded bank (`cascade.control.coordinated_turn_rates`); without
+them the differential-thrust yaw loop fought the turn with an 0.08 throttle split and the nose
+dropped 0.9 m. And the hover azimuth at the end is the final heading, so the wing is already
+facing the way the next transition will go.
+
 ## Wind and gusts
 
 `transition_rollout(..., environments=)` takes a time-major environment, so a Dryden sequence

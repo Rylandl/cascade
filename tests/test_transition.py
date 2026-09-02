@@ -294,3 +294,88 @@ def test_round_trip_survives_dryden_gusts():
     assert np.min(-position[:, 2]) > 0.4
     assert np.linalg.norm(position[-1] - np.asarray(hover.position_ned[-1])) < 3.0
     assert float(jnp.max(jnp.abs(controls.channel))) <= 1.0
+
+
+def test_coordinated_turn_rates_match_the_banked_turn():
+    from cascade.control import coordinated_turn_rates
+
+    level = quaternion_from_euler(0.0, 0.0, 0.0)
+    assert jnp.allclose(coordinated_turn_rates(level, jnp.asarray(10.0), jnp.asarray(9.81)), 0.0)
+    banked = quaternion_from_euler(jnp.deg2rad(30.0), 0.0, 0.0)
+    rates = coordinated_turn_rates(banked, jnp.asarray(10.0), jnp.asarray(9.81))
+    turn_rate = 9.81 * jnp.tan(jnp.deg2rad(30.0)) / 10.0
+    assert jnp.allclose(
+        rates, jnp.array([0.0, turn_rate * 0.5, turn_rate * jnp.cos(jnp.deg2rad(30.0))]), atol=1e-6
+    )
+    # Hover airspeeds are floored, so the feedforward stays bounded.
+    slow = coordinated_turn_rates(banked, jnp.asarray(0.0), jnp.asarray(9.81))
+    assert jnp.all(jnp.abs(slow) < 3.0)
+
+
+def test_round_trip_with_a_turn_in_cruise():
+    model, environment, controller, state = setup()
+    steps = 2000
+    speed_command = trapezoid_speed_profile(
+        steps,
+        DT,
+        hold_steps=200,
+        cruise_speed_m_s=jnp.asarray(8.0),
+        acceleration_m_s2=jnp.asarray(3.5),
+        cruise_steps=700,
+        deceleration_m_s2=jnp.asarray(2.0),
+    )
+    time = jnp.arange(steps) * DT
+    heading = jnp.deg2rad(90.0) * jnp.clip((time - 6.0) / 3.0, 0.0, 1.0)
+    hover = speed_profile_schedule(
+        speed_command,
+        DT,
+        start_position_ned=jnp.array([0.0, 0.0, -1.5]),
+        heading_rad=heading,
+        cruise_speed_m_s=jnp.asarray(8.0),
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.maximum(speed_command, 6.5),
+        altitude_m=jnp.full(steps, 1.5),
+        heading_rad=heading,
+    )
+
+    (final, _), (trajectory, controls, weight) = jax.jit(transition_rollout)(
+        model, controller, state, initial_transition_state(state), hover, forward, environment, DT
+    )
+
+    position = np.asarray(trajectory.rigid_body.position)
+    velocity = np.asarray(trajectory.rigid_body.velocity)
+    speed = np.linalg.norm(velocity, axis=1)
+    assert np.all(np.isfinite(position))
+    # Track follows the heading ramp: east-bound by the end of cruise.
+    k = int(11.0 / DT)
+    track = np.degrees(np.arctan2(velocity[k, 1], velocity[k, 0]))
+    assert abs(track - 90.0) < 5.0
+    assert np.min(-position[:, 2]) > 0.7
+    # Coordinated: the motors do not split against the turn.
+    turning = slice(int(6.5 / DT), int(9.5 / DT))
+    split = np.abs(np.asarray(controls.propeller[turning, 0] - controls.propeller[turning, 1]))
+    assert split.max() < 0.03
+    assert speed[-1] < 0.5
+    assert np.linalg.norm(position[-1] - np.asarray(hover.position_ned[-1])) < 1.0
+
+
+def test_hover_azimuth_across_wind_puts_the_span_into_the_wind():
+    from cascade.vtol import hover_azimuth_across_wind
+
+    north_wind = jnp.array([-3.0, 0.0, 0.0])  # air moving south: wind from the north
+    azimuth = hover_azimuth_across_wind(north_wind, jnp.asarray(0.1))
+    # Perpendicular to the wind, on the side nearer the preferred azimuth.
+    assert abs(float(jnp.cos(azimuth - jnp.pi))) < 1e-3 or abs(float(jnp.cos(azimuth))) < 1e-3
+    assert abs(float(azimuth) - jnp.pi / 2) < 1e-3
+    west_side = hover_azimuth_across_wind(north_wind, jnp.asarray(-0.1))
+    assert abs(float(west_side) + jnp.pi / 2) < 1e-3
+    # Calm air keeps the preferred azimuth.
+    calm = hover_azimuth_across_wind(jnp.zeros(3), jnp.asarray(0.3))
+    assert abs(float(calm) - 0.3) < 1e-3
+    # Batched and differentiable in the wind.
+    winds = jnp.array([[-3.0, 0.0, 0.0], [0.0, 2.0, 0.0]])
+    batched = hover_azimuth_across_wind(winds, jnp.zeros(2))
+    assert batched.shape == (2,)
+    gradient = jax.grad(lambda w: hover_azimuth_across_wind(w, jnp.asarray(0.1)))(north_wind)
+    assert jnp.all(jnp.isfinite(gradient))
