@@ -8,7 +8,8 @@ keys, states, and models, and differentiable, so the same functions serve reinfo
 learning (vmap over thousands of episodes), trajectory optimisation (grad through the
 episode), and system identification (vmap over model parameters).
 
-The packaged task is reference tracking: hold an airspeed, altitude, and heading from a trim.
+The packaged tasks are reference tracking (hold an airspeed, altitude, and heading from a
+trim) and hover (hold a position and belly azimuth, for a tailsitter).
 The reward is ``exp(-cost)`` in ``(0, 1]``, zero on the step an episode crashes, so an
 undiscounted return counts "good steps" and a policy that only survives earns nothing.
 """
@@ -28,6 +29,7 @@ from cascade.initialization import (
     control_to_array,
     equilibrate_internal_state,
     standard_environment,
+    zero_state,
 )
 from cascade.integration import StepFunction, repeat_control, rk4_step, rollout
 from cascade.math import (
@@ -39,6 +41,7 @@ from cascade.math import (
 )
 from cascade.model import AircraftModel
 from cascade.state import AircraftState, ControlInput, Environment
+from cascade.vtol import hover_throttle, thrust_direction_attitude
 
 
 @dataclass(frozen=True)
@@ -98,6 +101,63 @@ class TrackingTask(NamedTuple):
     rate_weight: Array
     effort_weight: Array
 
+    def heading_error(self, rigid) -> Array:
+        return _nose_heading(rigid.attitude) - self.heading_rad
+
+    def position_error(self, rigid) -> Array:
+        """World-frame error; only altitude is referenced, so north and east are zero."""
+
+        altitude_error = -rigid.position[..., 2] - self.altitude_m
+        zeros = jnp.zeros_like(altitude_error)
+        return jnp.stack((zeros, zeros, -altitude_error), axis=-1)
+
+    def cost(self, rigid, environment: Environment, action: Array) -> Array:
+        airspeed = safe_norm(rigid.velocity - environment.wind)
+        airspeed_error = (airspeed - self.airspeed_m_s) / jnp.maximum(self.airspeed_m_s, 1.0)
+        altitude_error = (-rigid.position[..., 2] - self.altitude_m) / 10.0
+        return (
+            self.airspeed_weight * jnp.square(airspeed_error)
+            + self.altitude_weight * jnp.square(altitude_error)
+            + self.heading_weight * (1.0 - jnp.cos(self.heading_error(rigid)))
+            + self.rate_weight * jnp.sum(jnp.square(rigid.angular_velocity), axis=-1)
+            + self.effort_weight * jnp.mean(jnp.square(action), axis=-1)
+        )
+
+
+class HoverTask(NamedTuple):
+    """Hold a position with the belly toward an azimuth: the tailsitter's hover.
+
+    Position error is normalised by 1 m and velocity by 1 m/s (hover is a precision task);
+    the azimuth is the belly direction (body z projected on the horizontal), which is what a
+    tailsitter's hover attitude fixes, since its nose points up.
+    """
+
+    position_ned: Array
+    azimuth_rad: Array
+    position_weight: Array
+    velocity_weight: Array
+    azimuth_weight: Array
+    rate_weight: Array
+    effort_weight: Array
+
+    def heading_error(self, rigid) -> Array:
+        return _belly_azimuth(rigid.attitude) - self.azimuth_rad
+
+    def position_error(self, rigid) -> Array:
+        return self.position_ned - rigid.position
+
+    def cost(self, rigid, environment: Environment, action: Array) -> Array:
+        return (
+            self.position_weight * jnp.sum(jnp.square(self.position_error(rigid)), axis=-1)
+            + self.velocity_weight * jnp.sum(jnp.square(rigid.velocity), axis=-1)
+            + self.azimuth_weight * (1.0 - jnp.cos(self.heading_error(rigid)))
+            + self.rate_weight * jnp.sum(jnp.square(rigid.angular_velocity), axis=-1)
+            + self.effort_weight * jnp.mean(jnp.square(action), axis=-1)
+        )
+
+
+Task = TrackingTask | HoverTask
+
 
 class Reference(NamedTuple):
     """The trimmed flight an episode is drawn around: state, control, and environment."""
@@ -156,6 +216,48 @@ def trimmed_reference(
     return Reference(state=result.state, control=result.control, environment=environment)
 
 
+def hover_task(
+    position_ned,
+    azimuth_rad: float = 0.0,
+    *,
+    position_weight: float = 1.0,
+    velocity_weight: float = 0.1,
+    azimuth_weight: float = 0.5,
+    rate_weight: float = 0.02,
+    effort_weight: float = 0.05,
+) -> HoverTask:
+    return HoverTask(
+        position_ned=jnp.asarray(position_ned, dtype=jnp.float32),
+        azimuth_rad=jnp.asarray(azimuth_rad),
+        position_weight=jnp.asarray(position_weight),
+        velocity_weight=jnp.asarray(velocity_weight),
+        azimuth_weight=jnp.asarray(azimuth_weight),
+        rate_weight=jnp.asarray(rate_weight),
+        effort_weight=jnp.asarray(effort_weight),
+    )
+
+
+def hover_reference(
+    model: AircraftModel, task: HoverTask, environment: Environment | None = None
+) -> Reference:
+    """The static hover of a tailsitter: nose up, belly toward the azimuth, throttle balancing
+    weight from the static thrust map, elevons neutral. Not a trim (a wing in its own propwash
+    carries a small camber force), so hold it with feedback."""
+
+    environment = standard_environment() if environment is None else environment
+    up = -normalize(environment.gravity)
+    attitude = thrust_direction_attitude(up, task.azimuth_rad)
+    weight = model.mass * safe_norm(environment.gravity)
+    throttle = hover_throttle(model, weight, environment.density)
+    state = zero_state(model)
+    state = state._replace(
+        rigid_body=state.rigid_body._replace(position=task.position_ned, attitude=attitude)
+    )
+    control = ControlInput(propeller=throttle, channel=jnp.zeros(model.n_control_channels))
+    state = equilibrate_internal_state(model, state, control, environment)
+    return Reference(state=state, control=control, environment=environment)
+
+
 def _quaternion_from_rotvec(rotvec: Array) -> Array:
     angle = safe_norm(rotvec, keepdims=True)
     vector = 0.5 * rotvec * jnp.sinc(angle / (2.0 * jnp.pi))
@@ -190,19 +292,30 @@ def reset(
     return state, observation(model, task, reference, state)
 
 
-def _heading(attitude_xyzw: Array) -> Array:
+def reference_speed(task: Task) -> Array:
+    """Speed that normalises velocity observations: the tracking airspeed, or 1 m/s in hover."""
+
+    return task.airspeed_m_s if isinstance(task, TrackingTask) else jnp.asarray(1.0)
+
+
+def _nose_heading(attitude_xyzw: Array) -> Array:
     nose = quaternion_rotate(attitude_xyzw, jnp.array([1.0, 0.0, 0.0]))
     return jnp.arctan2(nose[..., 1], nose[..., 0])
 
 
-def observation(
-    model: AircraftModel, task: TrackingTask, reference: Reference, state: EnvState
-) -> Array:
-    """Body-frame observation vector, independent of world position except through altitude.
+def _belly_azimuth(attitude_xyzw: Array) -> Array:
+    belly = quaternion_rotate(attitude_xyzw, jnp.array([0.0, 0.0, 1.0]))
+    return jnp.arctan2(belly[..., 1], belly[..., 0])
 
-    Layout: air velocity in body FRD (3), airspeed, alpha, beta, body rates (3), gravity
-    direction in body axes (3), heading error as sin and cos (2), altitude error / 10 m (1),
-    surface deflections (S), propeller speeds as a fraction of maximum (P).
+
+def observation(model: AircraftModel, task: Task, reference: Reference, state: EnvState) -> Array:
+    """Body-frame observation vector, independent of world position except through the error.
+
+    Layout: air velocity in body FRD over the reference speed (3), airspeed over the reference
+    speed, alpha, beta (3), body rates (3), gravity direction in body axes (3), heading error as
+    sin and cos (2), position error in body axes over 10 m (3), surface deflections (S),
+    propeller speeds as a fraction of maximum (P). Tracking tasks reference only altitude, so
+    their position error is vertical.
     """
 
     rigid = state.aircraft.rigid_body
@@ -212,16 +325,17 @@ def observation(
     alpha = jnp.arctan2(air_body[..., 2], air_body[..., 0])
     beta = jnp.arcsin(jnp.clip(air_body[..., 1] / jnp.maximum(airspeed, 1e-3), -1.0, 1.0))
     gravity_body = quaternion_rotate_inverse(rigid.attitude, normalize(environment.gravity))
-    heading_error = _heading(rigid.attitude) - task.heading_rad
-    altitude_error = (-rigid.position[..., 2] - task.altitude_m) / 10.0
+    heading_error = task.heading_error(rigid)
+    position_error_body = quaternion_rotate_inverse(rigid.attitude, task.position_error(rigid))
+    speed_scale = jnp.maximum(reference_speed(task), 1.0)
     return jnp.concatenate(
         (
-            air_body / jnp.maximum(task.airspeed_m_s, 1.0),
-            jnp.stack((airspeed / jnp.maximum(task.airspeed_m_s, 1.0), alpha, beta), axis=-1),
+            air_body / speed_scale,
+            jnp.stack((airspeed / speed_scale, alpha, beta), axis=-1),
             rigid.angular_velocity,
             gravity_body,
             jnp.stack((jnp.sin(heading_error), jnp.cos(heading_error)), axis=-1),
-            altitude_error[..., None],
+            position_error_body / 10.0,
             state.aircraft.actuators.surface_deflection,
             state.aircraft.actuators.propeller_speed / model.actuators.propeller_speed_max,
         ),
@@ -255,24 +369,10 @@ def control_to_action(config: EpisodeConfig, control: ControlInput) -> Array:
     )
 
 
-def _tracking_cost(task: TrackingTask, rigid, environment: Environment, action: Array) -> Array:
-    airspeed = safe_norm(rigid.velocity - environment.wind)
-    airspeed_error = (airspeed - task.airspeed_m_s) / jnp.maximum(task.airspeed_m_s, 1.0)
-    altitude_error = (-rigid.position[..., 2] - task.altitude_m) / 10.0
-    heading_error = 1.0 - jnp.cos(_heading(rigid.attitude) - task.heading_rad)
-    return (
-        task.airspeed_weight * jnp.square(airspeed_error)
-        + task.altitude_weight * jnp.square(altitude_error)
-        + task.heading_weight * heading_error
-        + task.rate_weight * jnp.sum(jnp.square(rigid.angular_velocity), axis=-1)
-        + task.effort_weight * jnp.mean(jnp.square(action), axis=-1)
-    )
-
-
 def step(
     model: AircraftModel,
     config: EpisodeConfig,
-    task: TrackingTask,
+    task: Task,
     reference: Reference,
     state: EnvState,
     action: Array,
@@ -295,7 +395,7 @@ def step(
         step=config.step,
     )
     rigid = aircraft.rigid_body
-    cost = _tracking_cost(task, rigid, reference.environment, action)
+    cost = task.cost(rigid, reference.environment, action)
     down_body = quaternion_rotate_inverse(rigid.attitude, normalize(reference.environment.gravity))
     crashed = (-rigid.position[..., 2] < config.crash_altitude_m) | (
         down_body[..., 2] < jnp.cos(config.upright_limit_rad)
@@ -317,7 +417,7 @@ def step(
 def rollout_actions(
     model: AircraftModel,
     config: EpisodeConfig,
-    task: TrackingTask,
+    task: Task,
     reference: Reference,
     state: EnvState,
     actions: Array,

@@ -106,6 +106,10 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       cost 0.40 -> 0.28 in 12 steps); test asserts one descent step improves the cost
 - [x] 6i `cascade.env`: native-JAX episode functions (reset/step/rollout_actions) over a trimmed
       tracking task, vmap-batched, differentiable through the episode (docs/environments.md)
-- [ ] 6j candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
+- [x] 6j `HoverTask` + `hover_reference` for `cascade.env` (tailsitter hover: position, velocity,
+      belly azimuth); body-frame position error joins the observation
+- [ ] 6k candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
       flap-moment change (the campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set
-      (corridor, round trip, gusts); a hover/transition task for `cascade.env` on the tailsitter
+      (corridor, round trip, gusts); a transition task (hover -> cruise reward) for `cascade.env`;
+      a policy-rollout helper (`rollout_policy`) and a baseline that wraps the control cascade as
+      a policy so learned policies have a reference score

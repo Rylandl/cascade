@@ -30,7 +30,7 @@ def test_reset_and_step_are_batched_jitted_and_finite(setup):
     keys = jax.random.split(jax.random.PRNGKey(0), 16)
     batched_reset = jax.jit(jax.vmap(lambda k: reset(model, config, task, reference, k)))
     states, observations = batched_reset(keys)
-    assert observations.shape == (16, 15 + model.n_surfaces + model.n_propellers)
+    assert observations.shape == (16, 17 + model.n_surfaces + model.n_propellers)
     assert jnp.all(jnp.isfinite(observations))
 
     batched_step = jax.jit(jax.vmap(lambda s, a: step(model, config, task, reference, s, a)))
@@ -38,7 +38,7 @@ def test_reset_and_step_are_batched_jitted_and_finite(setup):
         jax.random.PRNGKey(1), (16, action_size(model)), minval=-1.0, maxval=1.0
     )
     next_states, observations, rewards, dones, info = batched_step(states, actions)
-    assert observations.shape == (16, 15 + model.n_surfaces + model.n_propellers)
+    assert observations.shape == (16, 17 + model.n_surfaces + model.n_propellers)
     assert rewards.shape == (16,) and dones.shape == (16,)
     assert jnp.all(jnp.isfinite(observations)) and jnp.all((rewards >= 0.0) & (rewards <= 1.0))
     assert jnp.all(next_states.step == 1)
@@ -109,3 +109,76 @@ def test_return_is_differentiable_in_the_actions(setup):
     assert gradient.shape == actions.shape
     assert jnp.all(jnp.isfinite(gradient))
     assert float(jnp.max(jnp.abs(gradient))) > 0.0
+
+
+@pytest.fixture(scope="module")
+def hover_setup():
+    from cascade.env import hover_reference, hover_task
+    from cascade.reference import tailsitter_reference
+
+    model = tailsitter_reference()
+    task = hover_task([0.0, 0.0, -1.5], azimuth_rad=0.0)
+    reference = hover_reference(model, task)
+    config = EpisodeConfig(
+        control_frequency_hz=100.0,
+        horizon_steps=50,
+        reset_position_std_m=0.2,
+        reset_velocity_std_m_s=0.2,
+        reset_attitude_std_rad=0.05,
+        reset_rate_std_rad_s=0.1,
+        upright_limit_rad=3.2,
+    )
+    return model, config, task, reference
+
+
+def test_hover_reference_is_nose_up_and_weight_balanced(hover_setup):
+    from cascade.dynamics import evaluate_dynamics
+    from cascade.math import quaternion_rotate
+
+    model, config, task, reference = hover_setup
+
+    up = quaternion_rotate(reference.state.rigid_body.attitude, jnp.array([1.0, 0.0, 0.0]))
+    assert float(up[2]) < -0.99
+    result = evaluate_dynamics(model, reference.state, reference.control, reference.environment)
+    acceleration = result.derivative.rigid_body.velocity
+    assert float(jnp.linalg.norm(acceleration)) < 0.3 * 9.81
+
+
+def test_hover_task_episode_is_finite_and_rewards_staying_put(hover_setup):
+    from cascade.env import action_size
+
+    model, config, task, reference = hover_setup
+    keys = jax.random.split(jax.random.PRNGKey(0), 8)
+    states, observations = jax.jit(jax.vmap(lambda k: reset(model, config, task, reference, k)))(
+        keys
+    )
+    assert observations.shape == (8, 17 + model.n_surfaces + model.n_propellers)
+    assert jnp.all(jnp.isfinite(observations))
+    hold = jnp.broadcast_to(
+        control_to_action(config, reference.control), (20, 8, action_size(model))
+    )
+    run = jax.jit(
+        jax.vmap(lambda s, a: rollout_actions(model, config, task, reference, s, a), in_axes=(0, 1))
+    )
+    final, (observations, rewards, dones) = run(states, hold)
+    assert jnp.all(jnp.isfinite(observations))
+    # Open-loop hover drifts but does not fall over inside a fifth of a second.
+    assert float(jnp.mean(rewards)) > 0.5
+    assert not bool(dones.any())
+
+
+def test_hover_return_is_differentiable_in_the_actions(hover_setup):
+    from cascade.env import action_size
+
+    model, config, task, reference = hover_setup
+    state, _ = reset(model, config, task, reference, jax.random.PRNGKey(5))
+    actions = jnp.broadcast_to(
+        control_to_action(config, reference.control), (10, action_size(model))
+    )
+
+    def episode_return(actions):
+        _, (_, rewards, _) = rollout_actions(model, config, task, reference, state, actions)
+        return jnp.sum(rewards)
+
+    gradient = jax.jit(jax.grad(episode_return))(actions)
+    assert jnp.all(jnp.isfinite(gradient)) and float(jnp.max(jnp.abs(gradient))) > 0.0
