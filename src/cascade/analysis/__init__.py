@@ -1,5 +1,6 @@
 """Trim, envelope, sweep, and local-linear analysis tools."""
 
+from cascade.analysis.authority import control_authority
 from cascade.analysis.coordinates import (
     control_retract,
     state_difference,
@@ -21,6 +22,7 @@ from cascade.analysis.trim import (
 )
 
 __all__ = [
+    "control_authority",
     "AerodynamicSweep",
     "StabilityMode",
     "StraightFlightCondition",

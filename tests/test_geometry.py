@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 
 import cascade
-from cascade.archetypes import ConventionalDesign, FlyingWingDesign, design_spec
-from cascade.geometry import aircraft_parts, mjcf_string, surface_parts, write_obj
+from cascade.design.archetypes import ConventionalDesign, FlyingWingDesign, design_spec
+from cascade.viz.geometry import aircraft_parts, mjcf_string, surface_parts, write_obj
 
 SPECS = {
     "aerobatic": cascade.aerobatic_reference_spec(),
@@ -74,7 +74,7 @@ def _gl_available() -> bool:
 @pytest.mark.parametrize("name", list(SPECS))
 def test_mjcf_loads_in_mujoco_and_flaps_hinge_trailing_edge_down(name):
     mujoco = pytest.importorskip("mujoco")
-    from cascade.render import Scene
+    from cascade.viz.render import Scene
 
     spec = SPECS[name]
     model = mujoco.MjModel.from_xml_string(mjcf_string(spec))

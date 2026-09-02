@@ -70,9 +70,7 @@ def test_gradient_through_environment_sequence_is_finite():
     def final_north_position(wind_speed):
         wind = jnp.stack((wind_speed, jnp.array(0.0), jnp.array(0.0)))
         environments = repeat_control(base_environment._replace(wind=wind), steps=STEPS)
-        final, _ = rollout(
-            model, state, controls, base_environment, DT, environments=environments
-        )
+        final, _ = rollout(model, state, controls, base_environment, DT, environments=environments)
         return final.rigid_body.position[0]
 
     gradient = jax.jit(jax.grad(final_north_position))(jnp.array(2.0))

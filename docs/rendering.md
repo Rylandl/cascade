@@ -1,6 +1,6 @@
 # Geometry and rendering
 
-`cascade.geometry` draws an aircraft from its specification and `cascade.render` plays a
+`cascade.viz.geometry` draws an aircraft from its specification and `cascade.viz.render` plays a
 Cascade trajectory through MuJoCo to an MP4. Physics stays in JAX; MuJoCo only draws.
 
 ## Geometry from the spec

@@ -1,6 +1,6 @@
 # Weather
 
-`cascade.weather` gives an episode a mean wind with a boundary-layer profile, turbulence by
+`cascade.env.weather` gives an episode a mean wind with a boundary-layer profile, turbulence by
 MIL-F-8785C class or by station record, and a gust generator that runs inside the step at the
 aircraft's own altitude. `cascade.env` takes a `WeatherCondition` in `reset` and `step` (and
 through `rollout_actions` and `rollout_policy`), so a batch of episodes can each fly in a
@@ -27,7 +27,7 @@ and a tailsitter hovering at 1.5 m sees about half the reported 10 m wind over g
 ## Gusts
 
 `step_gust(condition, state, key, dt, airspeed_m_s, altitude_m, heading_rad)` advances the
-Dryden filters of `cascade.gusts` one period with the intensities and length scales of the
+Dryden filters of `cascade.env.gusts` one period with the intensities and length scales of the
 aircraft's current altitude and airspeed, so turbulence changes as it climbs, descends, and
 slows. The longitudinal gust acts along the heading, the lateral to its right, the vertical
 down. Stationary intensity matches the class (`tests/test_weather.py`); a calm condition gives

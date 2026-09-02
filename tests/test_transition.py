@@ -1,19 +1,21 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 import cascade
-from cascade.control import GuidanceSetpoint
-from cascade.math import quaternion_from_euler, quaternion_rotate
-from cascade.vtol import (
+from cascade.control import GuidanceSetpoint, tailsitter_reference_controller
+from cascade.control.vtol import (
     HoverSetpoint,
     initial_transition_state,
     speed_profile_schedule,
-    tailsitter_reference_controller,
     transition_rollout,
     trapezoid_speed_profile,
     velocity_ramp_schedule,
 )
+from cascade.math import quaternion_from_euler, quaternion_rotate
+
+pytestmark = pytest.mark.slow
 
 DT = 0.01
 
@@ -240,7 +242,7 @@ def test_hover_holds_against_a_spanwise_wind_with_differential_thrust():
 
 
 def test_round_trip_survives_dryden_gusts():
-    from cascade.gusts import dryden_environment_sequence, dryden_low_altitude
+    from cascade.env.gusts import dryden_environment_sequence, dryden_low_altitude
 
     model, environment, controller, state = setup()
     steps = 1600
@@ -361,7 +363,7 @@ def test_round_trip_with_a_turn_in_cruise():
 
 
 def test_hover_azimuth_across_wind_puts_the_span_into_the_wind():
-    from cascade.vtol import hover_azimuth_across_wind
+    from cascade.control.vtol import hover_azimuth_across_wind
 
     north_wind = jnp.array([-3.0, 0.0, 0.0])  # air moving south: wind from the north
     azimuth = hover_azimuth_across_wind(north_wind, jnp.asarray(0.1))

@@ -9,14 +9,14 @@ alone. The spread of cruise speed, short-period frequency, and tuned gains is th
 import jax
 import numpy as np
 
-from cascade.archetypes import (
+from cascade.control.autotune import step_response, tune_cascade
+from cascade.design.archetypes import (
     ConventionalDesign,
     FlyingWingDesign,
     design_spec,
     sample_designs,
     validate_design,
 )
-from cascade.autotune import step_response, tune_cascade
 
 
 def main() -> None:

@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from cascade.weather import (
+from cascade.env.weather import (
     WeatherRecords,
     initial_gust_state,
     mean_wind_ned,

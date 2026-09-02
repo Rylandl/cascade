@@ -26,8 +26,10 @@ the same pure functional core.
 - **Airframe-specific truth.** The engine is reusable, but high-alpha parameters and residuals are
   expected to be identified for each airframe.
 
-See [the architecture document](docs/architecture.md) for scope, equations, extension points, and
-the roadmap. The [analysis guide](docs/analysis.md) covers trim, post-stall branch continuation,
+Quick test run: `uv run pytest -m "not slow"` (the full suite takes several minutes).
+
+See [the architecture document](docs/architecture.md) for scope, equations, extension points,
+the package layout, and the roadmap. The [analysis guide](docs/analysis.md) covers trim, post-stall branch continuation,
 coefficient sweeps, and local linearization; [aircraft specifications](docs/aircraft-spec.md)
 documents the versioned TOML format; [the control guide](docs/control.md) covers the rate/attitude/
 guidance cascade, channel-map sign conventions, tuning, and differentiable-tuning examples;
@@ -81,10 +83,10 @@ final_state, trajectory = jax.jit(cascade.rollout)(model, state, controls, envir
 ```
 
 `cascade.tailsitter_reference()` is an indoor-class flying-wing tailsitter fixture whose propwash
-gives its elevons authority at zero airspeed; `cascade.vtol` adds hover guidance and a
+gives its elevons authority at zero airspeed; `cascade.control.vtol` adds hover guidance and a
 hover-to-cruise transition controller over the same loops (`docs/tailsitter.md`).
 
-`cascade.gusts` generates Dryden turbulence as a time-major environment sequence for
+`cascade.env.gusts` generates Dryden turbulence as a time-major environment sequence for
 `rollout`, with per-world realizations from a PRNG key.
 
 `cascade.Plant` wraps the same core as a stepped hidden plant for identification tooling: reset to

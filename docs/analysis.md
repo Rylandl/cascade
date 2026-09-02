@@ -53,7 +53,7 @@ against its tables. `rollout` accepts a time-major `environments` sequence for g
 
 ## Gusts
 
-`cascade.gusts` generates Dryden continuous turbulence (MIL-F-8785C) as a time-major
+`cascade.env.gusts` generates Dryden continuous turbulence (MIL-F-8785C) as a time-major
 `Environment` sequence: a first-order longitudinal filter and second-order lateral and vertical
 filters driven by white noise, with time constants `L / V` from the length scales and the
 aircraft's nominal airspeed, rotated from a chosen heading into world NED and added to the mean
@@ -63,7 +63,7 @@ and broadcast over worlds, so every world in a batch can see its own gust histor
 
 ```python
 import jax
-from cascade.gusts import dryden_environment_sequence, dryden_low_altitude
+from cascade.env.gusts import dryden_environment_sequence, dryden_low_altitude
 
 parameters = dryden_low_altitude(altitude_m=50.0, wind_20ft_m_s=15.4)
 environments = dryden_environment_sequence(

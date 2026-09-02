@@ -1,7 +1,7 @@
 # Airframe archetypes and automatic tuning
 
-`cascade.archetypes` turns a handful of design decisions into a full aircraft specification on
-the panel backend, and `cascade.autotune` tunes the control cascade for any specification from
+`cascade.design.archetypes` turns a handful of design decisions into a full aircraft specification on
+the panel backend, and `cascade.control.autotune` tunes the control cascade for any specification from
 its own trim and linearisation. Together they produce a family of visibly different, flyable
 airframes, each with a reference controller no human tuned, whose parameters a learner never
 sees. The designs are plausible, not validated against real aircraft; their job is diversity.
@@ -70,10 +70,10 @@ gains.
 
 ## Families
 
-`cascade.family.sample_family(archetype, key, count)` draws valid designs, trims each at its
+`cascade.env.family.sample_family(archetype, key, count)` draws valid designs, trims each at its
 cruise, tunes a cascade for each, and stacks models, tasks, references, and controllers along
 a family axis, so one `jax.vmap` over `cascade.env.reset`, `step`, or `rollout_policy` flies
-the whole family, each member under its own baseline and, with `cascade.weather`, in its own
+the whole family, each member under its own baseline and, with `cascade.env.weather`, in its own
 weather. Every flying wing has the same surface and propeller count whatever its layout
 (winglets of zero area when unwanted, a pusher as two co-located halves), and every
 conventional design likewise, which is what makes the stack possible. `family_member(family,

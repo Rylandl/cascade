@@ -13,18 +13,22 @@ import jax
 import jax.numpy as jnp
 
 import cascade
-from cascade.archetypes import ConventionalDesign, cruise_speed, design_spec
-from cascade.autotune import tune_cascade
-from cascade.control import GuidanceSetpoint, closed_loop_rollout, initial_cascade_state
-from cascade.math import quaternion_from_euler
-from cascade.render import render_trajectory
-from cascade.vtol import (
+from cascade.control import (
+    GuidanceSetpoint,
+    closed_loop_rollout,
+    initial_cascade_state,
+    tailsitter_reference_controller,
+)
+from cascade.control.autotune import tune_cascade
+from cascade.control.vtol import (
     initial_transition_state,
     speed_profile_schedule,
-    tailsitter_reference_controller,
     transition_rollout,
     trapezoid_speed_profile,
 )
+from cascade.design.archetypes import ConventionalDesign, cruise_speed, design_spec
+from cascade.math import quaternion_from_euler
+from cascade.viz.render import render_trajectory
 
 
 def tailsitter_round_trip(dt: float = 0.005, steps: int = 3200):

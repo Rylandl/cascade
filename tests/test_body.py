@@ -33,7 +33,12 @@ def coefficient_only_model():
     body = BodyModel(
         lift=LongitudinalCoefficients(scalar(0.1), scalar(4.0), scalar(3.0), scalar(0.3)),
         drag=DragCoefficients(
-            scalar(0.02), scalar(0.05), scalar(1.0), scalar(-0.01), scalar(0.2), scalar(0.0),
+            scalar(0.02),
+            scalar(0.05),
+            scalar(1.0),
+            scalar(-0.01),
+            scalar(0.2),
+            scalar(0.0),
             scalar(0.06),
         ),
         side=LateralCoefficients(
@@ -131,9 +136,7 @@ def test_body_block_matches_hand_computed_forces_and_moments():
 
     # Elevator through the deflection map: the tail surface angle is the generalized elevator.
     elevator = 0.1
-    trimmed = evaluate(
-        model, (speed, 0.0, 0.0), deflections=(0.0, 0.0, elevator, 0.0)
-    ).aerodynamics
+    trimmed = evaluate(model, (speed, 0.0, 0.0), deflections=(0.0, 0.0, elevator, 0.0)).aerodynamics
     assert jnp.allclose(
         trimmed.force_body[2] - level.force_body[2],
         -dynamic_pressure * area * 0.3 * elevator,

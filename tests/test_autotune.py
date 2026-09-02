@@ -2,7 +2,8 @@ import jax
 import pytest
 
 import cascade
-from cascade.archetypes import (
+from cascade.control.autotune import step_response, tune_cascade
+from cascade.design.archetypes import (
     ConventionalDesign,
     FlyingWingDesign,
     cruise_speed,
@@ -10,7 +11,8 @@ from cascade.archetypes import (
     sample_designs,
     validate_design,
 )
-from cascade.autotune import step_response, tune_cascade
+
+pytestmark = pytest.mark.slow
 
 CASES = (
     ("aerobatic", cascade.aerobatic_reference_spec(), 12.0),

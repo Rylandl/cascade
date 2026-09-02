@@ -50,7 +50,7 @@ wing up through 90° alpha at 7 m/s.
 
 ![Round trip in calm air and in gusts](figures/tailsitter_round_trip.svg)
 
-`cascade.vtol` flies the fixture with the loops in `cascade.control`: hover guidance turns a
+`cascade.control.vtol` flies the fixture with the loops in `cascade.control`: hover guidance turns a
 position and velocity error into a thrust axis and throttle (with an integral so the wing's
 camber lift in its own propwash leaves no standing offset, a wing-lift credit so a fast, tilted
 wing is not pushed forward by thrust it no longer needs, and a position-error clip so the loop
@@ -98,7 +98,7 @@ exercised end to end: plant, actuators, stall dynamics, and every loop of the co
 ## Wind and gusts
 
 `transition_rollout(..., environments=)` takes a time-major environment, so a Dryden sequence
-from `cascade.gusts` runs through both transitions. Three things the wind cases taught:
+from `cascade.env.gusts` runs through both transitions. Three things the wind cases taught:
 
 - **Hover yaw is differential thrust.** In hover the body z axis is the belly normal, and the
   elevons have no authority about it. A 1 m/s spanwise wind weathervanes the wing about that

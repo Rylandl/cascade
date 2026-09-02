@@ -171,3 +171,12 @@ weather; Glassbox the adaptation and the metric.
       stall colouring; `viz` extra; `examples/render_flight.py`
 - [ ] 8c browser viewer (three.js artifact) and a matplotlib fallback for machines without GL;
       wind/gust arrows and propwash in the scene; a README video
+
+## Phase 9: packaging (2026-09-02)
+- [x] 9a layout by layer: `cascade.control` (loops, vtol, autotune, tuned), `cascade.env` (episode,
+      tasks, sensors, baselines, weather, gusts, family), `cascade.design`, `cascade.viz`; top-level
+      namespace trimmed to the core (55 names); compatibility shims for the old module paths
+- [x] 9b `env.Reference` -> `ReferenceFlight` (alias kept); tasks own `reference_speed()` and
+      `reference(model)`; `control_authority` -> `cascade.analysis`; tuned controllers out of the loops
+- [x] 9c `py.typed`, 0.2.0, CHANGELOG, project URLs, `slow` marker (`pytest -m "not slow"` ~109 tests)
+- [ ] 9d after Glassbox re-pins: drop the shims in 0.3

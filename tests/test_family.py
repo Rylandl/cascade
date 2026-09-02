@@ -1,10 +1,13 @@
 import jax
 import jax.numpy as jnp
+import pytest
 
-from cascade.archetypes import ConventionalDesign, FlyingWingDesign, design_spec
+from cascade.design.archetypes import ConventionalDesign, FlyingWingDesign, design_spec
 from cascade.env import EpisodeConfig, cascade_policy, reset, rollout_policy
-from cascade.family import family_member, sample_family
-from cascade.weather import sample_weather_uniform
+from cascade.env.family import family_member, sample_family
+from cascade.env.weather import sample_weather_uniform
+
+pytestmark = pytest.mark.slow
 
 
 def test_flying_wings_share_a_topology_across_layouts():

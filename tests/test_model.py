@@ -51,6 +51,7 @@ def test_linear_thrust_law_satisfies_the_momentum_bound_up_to_its_limit():
     static, slope = float(thrust_map[0, 1, 0]), float(thrust_map[0, 0, 1])
     zero_thrust_advance_ratio = -static / slope
     bound = 0.5 * jnp.pi * zero_thrust_advance_ratio**2
+
     # C_T0 <= (pi / 2) J_0^2 is the closed-form condition for this special case.
     def scaled_model(scale):
         thrust = thrust_map.at[0, 1, 0].set(scale * bound)

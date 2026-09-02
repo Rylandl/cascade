@@ -100,53 +100,72 @@ def apply_params(base_model: AircraftModel, params: jax.Array) -> AircraftModel:
     """Replace the fitted coefficient leaves of the panel surfaces, keeping the static topology."""
 
     (
-        c_lift0, c_log_a, c_log_d0, c_log_k, c_cm0, c_cma,
-        i_lift0, i_log_a, i_log_d0, i_log_k, i_cm0, i_cma,
-        o_lift0, o_log_a, o_log_d0, o_log_k, o_cm0, o_cma, o_log_tau, o_cmflap, o_log_dflap,
-        w_log_a, w_log_d0,
+        c_lift0,
+        c_log_a,
+        c_log_d0,
+        c_log_k,
+        c_cm0,
+        c_cma,
+        i_lift0,
+        i_log_a,
+        i_log_d0,
+        i_log_k,
+        i_cm0,
+        i_cma,
+        o_lift0,
+        o_log_a,
+        o_log_d0,
+        o_log_k,
+        o_cm0,
+        o_cma,
+        o_log_tau,
+        o_cmflap,
+        o_log_dflap,
+        w_log_a,
+        w_log_d0,
     ) = params
 
     surfaces = base_model.surfaces
     lift0 = surfaces.lift_coefficient_zero.at[CENTER].set(c_lift0)
-    lift0 = lift0.at[INNER[0]:INNER[1] + 1].set(i_lift0).at[OUTER[0]:OUTER[1] + 1].set(o_lift0)
+    lift0 = lift0.at[INNER[0] : INNER[1] + 1].set(i_lift0).at[OUTER[0] : OUTER[1] + 1].set(o_lift0)
 
     slope = surfaces.lift_curve_slope.at[CENTER].set(jnp.exp(c_log_a))
     slope = (
-        slope.at[INNER[0]:INNER[1] + 1]
+        slope.at[INNER[0] : INNER[1] + 1]
         .set(jnp.exp(i_log_a))
-        .at[OUTER[0]:OUTER[1] + 1]
+        .at[OUTER[0] : OUTER[1] + 1]
         .set(jnp.exp(o_log_a))
-        .at[WINGLET[0]:WINGLET[1] + 1]
+        .at[WINGLET[0] : WINGLET[1] + 1]
         .set(jnp.exp(w_log_a))
     )
 
     drag0 = surfaces.drag_coefficient_zero.at[CENTER].set(jnp.exp(c_log_d0))
     drag0 = (
-        drag0.at[INNER[0]:INNER[1] + 1]
+        drag0.at[INNER[0] : INNER[1] + 1]
         .set(jnp.exp(i_log_d0))
-        .at[OUTER[0]:OUTER[1] + 1]
+        .at[OUTER[0] : OUTER[1] + 1]
         .set(jnp.exp(o_log_d0))
-        .at[WINGLET[0]:WINGLET[1] + 1]
+        .at[WINGLET[0] : WINGLET[1] + 1]
         .set(jnp.exp(w_log_d0))
     )
 
     induced = surfaces.induced_drag_factor.at[CENTER].set(jnp.exp(c_log_k))
     induced = (
-        induced.at[INNER[0]:INNER[1] + 1]
+        induced.at[INNER[0] : INNER[1] + 1]
         .set(jnp.exp(i_log_k))
-        .at[OUTER[0]:OUTER[1] + 1]
+        .at[OUTER[0] : OUTER[1] + 1]
         .set(jnp.exp(o_log_k))
     )
 
     cm0 = surfaces.moment_coefficient_zero.at[CENTER].set(c_cm0)
-    cm0 = cm0.at[INNER[0]:INNER[1] + 1].set(i_cm0).at[OUTER[0]:OUTER[1] + 1].set(o_cm0)
+    cm0 = cm0.at[INNER[0] : INNER[1] + 1].set(i_cm0).at[OUTER[0] : OUTER[1] + 1].set(o_cm0)
 
     cma = surfaces.moment_coefficient_alpha.at[CENTER].set(c_cma)
-    cma = cma.at[INNER[0]:INNER[1] + 1].set(i_cma).at[OUTER[0]:OUTER[1] + 1].set(o_cma)
+    cma = cma.at[INNER[0] : INNER[1] + 1].set(i_cma).at[OUTER[0] : OUTER[1] + 1].set(o_cma)
 
-    tau = surfaces.flap_effectiveness.at[OUTER[0]:OUTER[1] + 1].set(jnp.exp(o_log_tau))
-    cmflap = surfaces.moment_coefficient_flap.at[OUTER[0]:OUTER[1] + 1].set(o_cmflap)
-    dflap = surfaces.drag_coefficient_flap.at[OUTER[0]:OUTER[1] + 1].set(jnp.exp(o_log_dflap))
+    tau = surfaces.flap_effectiveness.at[OUTER[0] : OUTER[1] + 1].set(jnp.exp(o_log_tau))
+    cmflap = surfaces.moment_coefficient_flap.at[OUTER[0] : OUTER[1] + 1].set(o_cmflap)
+    dflap = surfaces.drag_coefficient_flap.at[OUTER[0] : OUTER[1] + 1].set(jnp.exp(o_log_dflap))
 
     new_surfaces = surfaces._replace(
         lift_coefficient_zero=lift0,
@@ -198,11 +217,29 @@ _compiled_jacobian = jax.jit(jax.jacfwd(_residual, argnums=0))
 def initial_guess() -> np.ndarray:
     return np.array(
         [
-            0.05, math.log(4.0), math.log(0.02), math.log(0.05), 0.0, -0.05,  # center
-            0.05, math.log(4.5), math.log(0.02), math.log(0.05), 0.0, -0.05,  # inner
-            0.05, math.log(4.0), math.log(0.02), math.log(0.05), 0.0, -0.05,  # outer
-            math.log(0.5), -0.3, math.log(0.08),  # outer flap
-            math.log(3.6), math.log(0.02),  # winglet
+            0.05,
+            math.log(4.0),
+            math.log(0.02),
+            math.log(0.05),
+            0.0,
+            -0.05,  # center
+            0.05,
+            math.log(4.5),
+            math.log(0.02),
+            math.log(0.05),
+            0.0,
+            -0.05,  # inner
+            0.05,
+            math.log(4.0),
+            math.log(0.02),
+            math.log(0.05),
+            0.0,
+            -0.05,  # outer
+            math.log(0.5),
+            -0.3,
+            math.log(0.08),  # outer flap
+            math.log(3.6),
+            math.log(0.02),  # winglet
         ]
     )
 
@@ -249,9 +286,7 @@ def fit() -> tuple[np.ndarray, np.ndarray, AircraftModel]:
         return np.asarray(jax.device_get(value), dtype=float)
 
     def scipy_jacobian(x: np.ndarray) -> np.ndarray:
-        value = _compiled_jacobian(
-            jnp.asarray(x), base_model, alpha, beta, control, target, anchor
-        )
+        value = _compiled_jacobian(jnp.asarray(x), base_model, alpha, beta, control, target, anchor)
         return np.asarray(jax.device_get(value), dtype=float)
 
     lower, upper = parameter_bounds()
@@ -274,7 +309,7 @@ def fit() -> tuple[np.ndarray, np.ndarray, AircraftModel]:
 def residual_rms_table(residual: np.ndarray) -> dict[str, float]:
     """RMS per coefficient over the data residuals only, dropping the trailing prior residuals."""
 
-    data_residual = residual[: -N_PARAMS]
+    data_residual = residual[:-N_PARAMS]
     per_point = data_residual.reshape(-1, len(COEFFICIENT_NAMES))
     return {
         name: float(np.sqrt(np.mean(np.square(per_point[:, index]))))
@@ -284,10 +319,29 @@ def residual_rms_table(residual: np.ndarray) -> dict[str, float]:
 
 def write_fitted_spec(params: np.ndarray, rms: dict[str, float]) -> AircraftSpec:
     (
-        c_lift0, c_log_a, c_log_d0, c_log_k, c_cm0, c_cma,
-        i_lift0, i_log_a, i_log_d0, i_log_k, i_cm0, i_cma,
-        o_lift0, o_log_a, o_log_d0, o_log_k, o_cm0, o_cma, o_log_tau, o_cmflap, o_log_dflap,
-        w_log_a, w_log_d0,
+        c_lift0,
+        c_log_a,
+        c_log_d0,
+        c_log_k,
+        c_cm0,
+        c_cma,
+        i_lift0,
+        i_log_a,
+        i_log_d0,
+        i_log_k,
+        i_cm0,
+        i_cma,
+        o_lift0,
+        o_log_a,
+        o_log_d0,
+        o_log_k,
+        o_cm0,
+        o_cma,
+        o_log_tau,
+        o_cmflap,
+        o_log_dflap,
+        w_log_a,
+        w_log_d0,
     ) = (float(value) for value in params)
 
     updates = {
@@ -425,9 +479,7 @@ def main() -> None:
     target_rates = rate_derivatives(target_model, alpha_rad, speed, rate)
     panel_rates = rate_derivatives(fitted_model, alpha_rad, speed, rate)
 
-    print(
-        "\nRate-derivative comparison at alpha=3 deg, 18 m/s, p=q=r=0.2 rad/s (one at a time):"
-    )
+    print("\nRate-derivative comparison at alpha=3 deg, 18 m/s, p=q=r=0.2 rad/s (one at a time):")
     header = f"{'derivative':>10s}  {'published':>10s}  {'target model':>13s}  {'panel model':>12s}"
     print(header)
     for name in PUBLISHED_RATES:

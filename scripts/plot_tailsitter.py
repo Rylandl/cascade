@@ -16,16 +16,18 @@ import numpy as np  # noqa: E402
 
 import cascade  # noqa: E402
 from cascade.analysis import StraightFlightCondition, continue_trims  # noqa: E402
-from cascade.control import GuidanceSetpoint  # noqa: E402
-from cascade.gusts import dryden_environment_sequence, dryden_low_altitude  # noqa: E402
-from cascade.math import quaternion_from_euler, quaternion_rotate  # noqa: E402
-from cascade.vtol import (  # noqa: E402
+from cascade.control import (
+    GuidanceSetpoint,  # noqa: E402
+    tailsitter_reference_controller,
+)
+from cascade.control.vtol import (  # noqa: E402
     initial_transition_state,
     speed_profile_schedule,
-    tailsitter_reference_controller,
     transition_rollout,
     trapezoid_speed_profile,
 )
+from cascade.env.gusts import dryden_environment_sequence, dryden_low_altitude  # noqa: E402
+from cascade.math import quaternion_from_euler, quaternion_rotate  # noqa: E402
 
 FIGURES = Path(__file__).resolve().parent.parent / "docs" / "figures"
 DT = 0.005

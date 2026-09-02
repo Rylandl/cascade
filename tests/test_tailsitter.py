@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
 from cascade.analysis import StraightFlightCondition, aerodynamic_sweep, trim_straight_flight
 from cascade.dynamics import evaluate_dynamics
@@ -7,6 +8,8 @@ from cascade.initialization import equilibrate_internal_state, standard_environm
 from cascade.math import quaternion_from_euler
 from cascade.reference import tailsitter_reference, tailsitter_reference_spec
 from cascade.state import ControlInput
+
+pytestmark = pytest.mark.slow
 
 GRAVITY = 9.80665
 

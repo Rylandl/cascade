@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cascade-flight"
-version = "0.1.0"
+version = "0.2.0"
 description = "Differentiable, batched, full-envelope fixed-wing flight dynamics in JAX"
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,8 @@ classifiers = [
 
 [project.urls]
 Repository = "https://github.com/Rylandl/cascade"
+Documentation = "https://github.com/Rylandl/cascade/tree/main/docs"
+Issues = "https://github.com/Rylandl/cascade/issues"
 
 [project.optional-dependencies]
 viz = ["mujoco>=3.1"]
@@ -35,6 +37,7 @@ dev = ["pytest>=8.0", "ruff>=0.9", "mujoco>=3.1"]
 packages = ["src/cascade"]
 
 [tool.pytest.ini_options]
+markers = ["slow: multi-second closed-loop, tuning, and family tests (deselect with -m \"not slow\")"]
 testpaths = ["tests"]
 addopts = "-q"
 

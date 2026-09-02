@@ -44,9 +44,7 @@ def thrust_map() -> np.ndarray:
     )
 
 
-def map_thrust(
-    coefficients: np.ndarray, throttle: np.ndarray, airspeed: np.ndarray
-) -> np.ndarray:
+def map_thrust(coefficients: np.ndarray, throttle: np.ndarray, airspeed: np.ndarray) -> np.ndarray:
     revolutions = throttle * N_MAX
     inflow = airspeed / DIAMETER
     speed_powers = np.stack((revolutions, revolutions**2), axis=-1)

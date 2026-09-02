@@ -147,8 +147,13 @@ def test_reference_rate_loop_roll_step_response():
     model, environment, trim = _reference_trim()
     controller = aerobatic_reference_controller()
     trajectory = _rate_only_rollout(
-        model, environment, controller.channels, trim, controller.rate,
-        jnp.array([1.0, 0.0, 0.0]), steps=80,
+        model,
+        environment,
+        controller.channels,
+        trim,
+        controller.rate,
+        jnp.array([1.0, 0.0, 0.0]),
+        steps=80,
     )
     rise_time, overshoot = _rise_time_and_overshoot(
         trajectory.rigid_body.angular_velocity[:, 0], 1.0, DT
@@ -161,8 +166,13 @@ def test_x8_rate_loop_roll_step_response():
     model, environment, trim = _x8_trim()
     controller = skywalker_x8_controller()
     trajectory = _rate_only_rollout(
-        model, environment, controller.channels, trim, controller.rate,
-        jnp.array([1.0, 0.0, 0.0]), steps=80,
+        model,
+        environment,
+        controller.channels,
+        trim,
+        controller.rate,
+        jnp.array([1.0, 0.0, 0.0]),
+        steps=80,
     )
     rise_time, overshoot = _rise_time_and_overshoot(
         trajectory.rigid_body.angular_velocity[:, 0], 1.0, DT
@@ -182,8 +192,14 @@ def test_reference_attitude_loop_roll_step_response():
     roll0, pitch0, yaw0 = _euler_from_quaternion(trim.state.rigid_body.attitude)
     setpoint = quaternion_from_euler(roll0 + np.deg2rad(20.0), pitch0, yaw0)
     trajectory = _attitude_rollout(
-        model, environment, controller.channels, trim, controller.rate, controller.attitude,
-        setpoint, steps=200,
+        model,
+        environment,
+        controller.channels,
+        trim,
+        controller.rate,
+        controller.attitude,
+        setpoint,
+        steps=200,
     )
     roll, _, _ = _euler_from_quaternion(trajectory.rigid_body.attitude)
     settle_time = _settle_time(roll, float(roll0), np.deg2rad(20.0), DT)
@@ -200,8 +216,14 @@ def test_reference_attitude_loop_pitch_step_response():
     roll0, pitch0, yaw0 = _euler_from_quaternion(trim.state.rigid_body.attitude)
     setpoint = quaternion_from_euler(roll0, pitch0 + np.deg2rad(5.0), yaw0)
     trajectory = _attitude_rollout(
-        model, environment, controller.channels, trim, controller.rate, controller.attitude,
-        setpoint, steps=200,
+        model,
+        environment,
+        controller.channels,
+        trim,
+        controller.rate,
+        controller.attitude,
+        setpoint,
+        steps=200,
     )
     _, pitch, _ = _euler_from_quaternion(trajectory.rigid_body.attitude)
     settle_time = _settle_time(pitch, float(pitch0), np.deg2rad(5.0), DT)
@@ -218,8 +240,14 @@ def test_x8_attitude_loop_roll_step_response():
     roll0, pitch0, yaw0 = _euler_from_quaternion(trim.state.rigid_body.attitude)
     setpoint = quaternion_from_euler(roll0 + np.deg2rad(20.0), pitch0, yaw0)
     trajectory = _attitude_rollout(
-        model, environment, controller.channels, trim, controller.rate, controller.attitude,
-        setpoint, steps=200,
+        model,
+        environment,
+        controller.channels,
+        trim,
+        controller.rate,
+        controller.attitude,
+        setpoint,
+        steps=200,
     )
     roll, _, _ = _euler_from_quaternion(trajectory.rigid_body.attitude)
     settle_time = _settle_time(roll, float(roll0), np.deg2rad(20.0), DT)
@@ -236,8 +264,14 @@ def test_x8_attitude_loop_pitch_step_response():
     roll0, pitch0, yaw0 = _euler_from_quaternion(trim.state.rigid_body.attitude)
     setpoint = quaternion_from_euler(roll0, pitch0 + np.deg2rad(5.0), yaw0)
     trajectory = _attitude_rollout(
-        model, environment, controller.channels, trim, controller.rate, controller.attitude,
-        setpoint, steps=200,
+        model,
+        environment,
+        controller.channels,
+        trim,
+        controller.rate,
+        controller.attitude,
+        setpoint,
+        steps=200,
     )
     _, pitch, _ = _euler_from_quaternion(trajectory.rigid_body.attitude)
     settle_time = _settle_time(pitch, float(pitch0), np.deg2rad(5.0), DT)
@@ -305,7 +339,8 @@ def test_reference_guidance_heading_turn():
     model, environment, trim = _reference_trim()
     controller = aerobatic_reference_controller()
     setpoint = GuidanceSetpoint(
-        airspeed_m_s=jnp.asarray(12.0), altitude_m=jnp.asarray(20.0),
+        airspeed_m_s=jnp.asarray(12.0),
+        altitude_m=jnp.asarray(20.0),
         heading_rad=jnp.asarray(np.deg2rad(45.0)),
     )
     _, states, _ = _guidance_step_rollout(
@@ -329,7 +364,8 @@ def test_x8_guidance_heading_turn():
     model, environment, trim = _x8_trim()
     controller = skywalker_x8_controller()
     setpoint = GuidanceSetpoint(
-        airspeed_m_s=jnp.asarray(18.0), altitude_m=jnp.asarray(100.0),
+        airspeed_m_s=jnp.asarray(18.0),
+        altitude_m=jnp.asarray(100.0),
         heading_rad=jnp.asarray(np.deg2rad(45.0)),
     )
     _, states, _ = _guidance_step_rollout(
@@ -388,9 +424,7 @@ def test_batched_rollout_matches_single_world_rollouts():
         assert jnp.allclose(
             batch_states.rigid_body.attitude[:, index], single_states.rigid_body.attitude, atol=1e-4
         )
-        assert jnp.allclose(
-            batch_controls.channel[:, index], single_controls.channel, atol=1e-5
-        )
+        assert jnp.allclose(batch_controls.channel[:, index], single_controls.channel, atol=1e-5)
         assert jnp.allclose(
             batch_controls.propeller[:, index], single_controls.propeller, atol=1e-5
         )
@@ -446,7 +480,8 @@ def test_attitude_output_updates_only_on_its_own_schedule():
 
     cascade_state = initial_cascade_state(controller, trim.state, trim.control)
     setpoint = GuidanceSetpoint(
-        airspeed_m_s=jnp.asarray(12.0), altitude_m=jnp.asarray(23.0),
+        airspeed_m_s=jnp.asarray(12.0),
+        altitude_m=jnp.asarray(23.0),
         heading_rad=jnp.asarray(np.deg2rad(6.0)),
     )
     state = trim.state
@@ -478,15 +513,18 @@ def test_reference_long_rollout_stays_finite_and_within_channel_limits():
     controller = aerobatic_reference_controller()
 
     hold = GuidanceSetpoint(
-        airspeed_m_s=jnp.full((500,), 12.0), altitude_m=jnp.full((500,), 20.0),
+        airspeed_m_s=jnp.full((500,), 12.0),
+        altitude_m=jnp.full((500,), 20.0),
         heading_rad=jnp.zeros((500,)),
     )
     climb_and_speed = GuidanceSetpoint(
-        airspeed_m_s=jnp.full((1000,), 14.0), altitude_m=jnp.full((1000,), 25.0),
+        airspeed_m_s=jnp.full((1000,), 14.0),
+        altitude_m=jnp.full((1000,), 25.0),
         heading_rad=jnp.zeros((1000,)),
     )
     turn = GuidanceSetpoint(
-        airspeed_m_s=jnp.full((500,), 14.0), altitude_m=jnp.full((500,), 25.0),
+        airspeed_m_s=jnp.full((500,), 14.0),
+        altitude_m=jnp.full((500,), 25.0),
         heading_rad=jnp.full((500,), np.deg2rad(45.0)),
     )
     setpoints = jax.tree.map(

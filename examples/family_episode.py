@@ -9,10 +9,10 @@ design parameters printed here are the hidden truth it never gets.
 import jax
 import jax.numpy as jnp
 
-from cascade.archetypes import ConventionalDesign, FlyingWingDesign
+from cascade.design.archetypes import ConventionalDesign, FlyingWingDesign
 from cascade.env import EpisodeConfig, cascade_policy, reset, rollout_policy
-from cascade.family import sample_family
-from cascade.weather import sample_weather_uniform
+from cascade.env.family import sample_family
+from cascade.env.weather import sample_weather_uniform
 
 COUNT = 6
 CONFIG = EpisodeConfig(control_frequency_hz=50.0, horizon_steps=300)

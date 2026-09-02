@@ -218,7 +218,7 @@ def aerodynamic_coefficients(
     normal = surfaces.normal_force_coefficient * sine * absolute_sine
     lift_separated = normal * cosine
     drag_separated = (
-        surfaces.normal_force_coefficient * absolute_sine**3
+        surfaces.normal_force_coefficient * absolute_sine** 3
         + surfaces.edge_drag_coefficient * jnp.square(cosine)
     )
     # The flap's extra normal force acts on the flap, aft of the quarter chord. The attached

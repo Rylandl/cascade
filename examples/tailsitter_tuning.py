@@ -13,15 +13,14 @@ import jax.numpy as jnp
 import numpy as np
 
 import cascade
-from cascade.control import GuidanceSetpoint
-from cascade.math import quaternion_from_euler
-from cascade.vtol import (
+from cascade.control import GuidanceSetpoint, tailsitter_reference_controller
+from cascade.control.vtol import (
     initial_transition_state,
     speed_profile_schedule,
-    tailsitter_reference_controller,
     transition_rollout,
     trapezoid_speed_profile,
 )
+from cascade.math import quaternion_from_euler
 
 DT = 0.01
 STEPS = 1600

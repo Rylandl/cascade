@@ -30,7 +30,7 @@ states, observations, rewards, dones, info = env_step(states, actions)   # actio
 | `HoverTask` / `hover_task` / `hover_reference` | hold a position with the belly toward an azimuth (a tailsitter's hover); the reference is the static hover from the thrust map, not a trim |
 | `TransitionTask` / `transition_task` | from hover, reach and hold a cruise airspeed, altitude, and heading (belly azimuth); starts from `hover_reference` |
 | `transition_policy` | the transition controller with a setpoint schedule as a policy: the baseline for a transition task |
-| `trimmed_reference` | trims the model in the task's flight once (host side); the episode is drawn around it |
+| `ReferenceFlight` / `trimmed_reference` / `hover_reference` | the flight an episode is drawn around (a cruise trim, or a static hover), built once host side; `task.reference(model)` picks the right one |
 | `reset` | Gaussian perturbation of the reference in position, velocity, body-frame attitude, and rates; actuators equilibrated to the trim control |
 | `step` | holds a normalised `[-1, 1]` action for one control period of RK4 sub-steps; returns state, observation, reward, done, info |
 | `rollout_actions` | scans a time-major action sequence; rewards after the first `done` are zeroed so the sum is the return |
@@ -64,7 +64,7 @@ available from `observation`.
 
 ## Weather
 
-`reset` and `step` take an optional `WeatherCondition` (`cascade.weather`): a mean wind with a
+`reset` and `step` take an optional `WeatherCondition` (`cascade.env.weather`): a mean wind with a
 logarithmic profile over the site's roughness and Dryden turbulence advanced every period at
 the aircraft's altitude, from a MIL-F-8785C class or a draw from station records. See
 `docs/weather.md`.

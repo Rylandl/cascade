@@ -6,6 +6,8 @@ from cascade.analysis import StraightFlightCondition, aerodynamic_sweep, trim_st
 from cascade.reference import skywalker_x8, skywalker_x8_panels, skywalker_x8_panels_spec
 from cascade.state import ControlInput
 
+pytestmark = pytest.mark.slow
+
 # Coarse validation grid; scripts/fit_x8_panels.py fits against a finer one and prints the full
 # residual table. Observed max abs errors here are C_L ~0.028, C_m ~0.015; tolerances below
 # leave headroom above what is actually achieved.

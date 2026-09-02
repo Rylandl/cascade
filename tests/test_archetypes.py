@@ -2,7 +2,7 @@ import jax
 import numpy as np
 import pytest
 
-from cascade.archetypes import (
+from cascade.design.archetypes import (
     ConventionalDesign,
     FlyingWingDesign,
     design_spec,
@@ -13,6 +13,8 @@ from cascade.archetypes import (
     wing_lift_slope,
 )
 from cascade.spec import load_aircraft_spec, save_aircraft_spec
+
+pytestmark = pytest.mark.slow
 
 NOMINALS = (
     FlyingWingDesign(),

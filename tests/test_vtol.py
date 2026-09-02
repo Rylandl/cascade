@@ -2,10 +2,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from cascade.initialization import standard_environment, zero_state
-from cascade.math import quaternion_from_euler, quaternion_from_matrix, quaternion_rotate
-from cascade.reference import tailsitter_reference
-from cascade.vtol import (
+from cascade.control.vtol import (
     HoverSetpoint,
     default_hover_gains,
     hover_guidance,
@@ -13,6 +10,9 @@ from cascade.vtol import (
     initial_hover_state,
     thrust_direction_attitude,
 )
+from cascade.initialization import standard_environment, zero_state
+from cascade.math import quaternion_from_euler, quaternion_from_matrix, quaternion_rotate
+from cascade.reference import tailsitter_reference
 
 
 def test_quaternion_from_matrix_inverts_rotations_in_every_quadrant():
@@ -115,7 +115,7 @@ def test_hover_guidance_is_batched_and_differentiable():
 
 
 def test_velocity_ramp_schedule_holds_then_reaches_cruise_consistently():
-    from cascade.vtol import velocity_ramp_schedule
+    from cascade.control.vtol import velocity_ramp_schedule
 
     schedule = velocity_ramp_schedule(
         400,

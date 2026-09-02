@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from cascade.gusts import (
+from cascade.env.gusts import (
     DrydenParameters,
     dryden_environment_sequence,
     dryden_low_altitude,

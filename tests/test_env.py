@@ -15,6 +15,8 @@ from cascade.env import (
 )
 from cascade.reference import aerobatic_reference
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(scope="module")
 def setup():
@@ -254,10 +256,10 @@ def test_episodes_vmap_over_randomised_models(setup):
 
 
 def test_transition_task_baseline_reaches_cruise_from_hover():
-    from cascade.control import GuidanceSetpoint
+    from cascade.control import GuidanceSetpoint, tailsitter_reference_controller
+    from cascade.control.vtol import velocity_ramp_schedule
     from cascade.env import hover_reference, rollout_policy, transition_policy, transition_task
     from cascade.reference import tailsitter_reference, tailsitter_reference_spec
-    from cascade.vtol import tailsitter_reference_controller, velocity_ramp_schedule
 
     spec = tailsitter_reference_spec()
     model = tailsitter_reference()
@@ -384,7 +386,7 @@ def test_sensor_noise_and_delay(setup):
 def test_weather_shifts_the_reset_velocity_and_gusts_the_episode(setup):
     from cascade.control import aerobatic_reference_controller
     from cascade.env import cascade_policy, rollout_policy
-    from cascade.weather import weather_condition
+    from cascade.env.weather import weather_condition
 
     model, config, task, reference = setup
     quiet = EpisodeConfig(

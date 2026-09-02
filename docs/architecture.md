@@ -216,7 +216,7 @@ rendering and hardware adapters         boundary coordinate conversion
 
 ### Milestone 3 — autonomy tooling
 
-- Done: `cascade.archetypes` and `cascade.autotune` — parametric flying-wing and conventional
+- Done: `cascade.design.archetypes` and `cascade.control.autotune` — parametric flying-wing and conventional
   designs from a handful of decisions, validity checks, and a cascade tuned from trim and
   linearisation for any spec. See `docs/archetypes.md`.
 
@@ -231,11 +231,11 @@ rendering and hardware adapters         boundary coordinate conversion
 - Done: `cascade.control` — a rate-scheduled rate/attitude/guidance cascade (PX4-style),
   differentiable and batchable, with a closed-loop rollout and tuned default controllers for both
   packaged aircraft. See `docs/control.md`.
-- Done: `cascade.geometry` and `cascade.render` — visual geometry, OBJ and MJCF export, and MuJoCo
+- Done: `cascade.viz.geometry` and `cascade.viz.render` — visual geometry, OBJ and MJCF export, and MuJoCo
   video playback of any trajectory with flaps, propellers, and stall colouring. See
   `docs/rendering.md`.
 - Domain randomization, gust models, and observation/sensor models.
-- Done: `cascade.weather` — mean wind with a log profile, MIL-F-8785C classes, per-step Dryden
+- Done: `cascade.env.weather` — mean wind with a log profile, MIL-F-8785C classes, per-step Dryden
   gusts at the aircraft's altitude, and station-record sampling, wired into `cascade.env`.
   See `docs/weather.md`.
 - MPC and trajectory-optimization examples through stall and transition.
@@ -260,3 +260,30 @@ rendering and hardware adapters         boundary coordinate conversion
 - Mixing aircraft with different static topologies inside a single compiled array.
 - Coupling the physics kernel to a renderer, environment API, or flight stack.
 - Hiding frame conventions or units behind implicit conversions.
+
+## Package layout and conventions
+
+The top-level `cascade` namespace is the core: `state`, `model`, `spec`, `math`, `actuators`,
+`aerodynamics`, `dynamics`, `integration`, `initialization`, `analysis` (trim, continuation,
+sweeps, linearisation, control authority), `canonical` (the NWU/FLU boundary), `plant` (the
+stepped, stateful plant), and `reference` (the packaged aircraft). The layers above are
+packages, each importing only from the layers below it, and the graph is acyclic:
+
+| package | modules | role |
+| --- | --- | --- |
+| `cascade.control` | `loops`, `vtol`, `autotune`, `tuned` | the rate/attitude/guidance cascade, hover and transition, tuning from trim and linearisation, the packaged aircraft's controllers |
+| `cascade.env` | `episode`, `tasks`, `sensors`, `baselines`, `weather`, `gusts`, `family` | episodes over the core for learning and optimisation |
+| `cascade.design` | `archetypes` | parametric airframes, validation, sampling |
+| `cascade.viz` | `geometry`, `render` | geometry from the spec, MJCF, MuJoCo video (optional `viz` extra) |
+
+Two configuration conventions, deliberately: anything a computation traces (gains, tasks,
+weather conditions, setpoints, states) is a `NamedTuple` and therefore a JAX pytree that can
+be batched, differentiated, and stacked; anything static (`EpisodeConfig`, `PlantConfig`, the
+archetype designs) is a frozen dataclass of Python scalars, a compile-time constant that
+closures capture. Host-side solves (trim, tuning, validation) return dataclasses with Python
+numbers; device-side functions return pytrees.
+
+Two entry points wrap the core on purpose: `Plant` is the hardware-like boundary (canonical
+state, spec channel units, held commands) for identification tooling, and `cascade.env` is
+the learning boundary (normalised actions, body-frame observations, rewards).
+
