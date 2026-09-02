@@ -40,8 +40,13 @@ states, observations, rewards, dones, info = env_step(states, actions)   # actio
 
 ## Observation
 
-`observation_size(model)` gives the length and `observation_layout(model)` the slice of each
-block, so a policy or an ablation never hardcodes offsets.
+`ObservationSpec` selects the blocks a policy sees (`EpisodeConfig.observation`); the default
+is everything below except the specific-force block, a privileged view for learning research,
+and `onboard_observation()` is what a small autopilot measures: rates and specific force from
+an IMU, gravity direction and heading from an attitude estimate, pitot airspeed, and a GNSS
+position error, with no flow angles and no actuator states. `observation_size(model, spec)`
+gives the length and `observation_layout(model, spec)` the slice of each block (`None` when
+absent), so a policy or an ablation never hardcodes offsets.
 
 Body-frame, so a policy never sees world position except through the altitude error:
 
@@ -55,12 +60,15 @@ Body-frame, so a policy never sees world position except through the altitude er
 | 14:17 | position error in body axes over 10 m (vertical only for tracking tasks) |
 | 17:17+S | surface deflections (rad) |
 | 17+S: | propeller speeds as a fraction of maximum |
+| (opt) | specific force in body axes in g: acceleration less gravity, what an accelerometer reads |
 
 ## Sensors
 
-`reset` and `step` take an optional `SensorNoise` (`sensor_noise(...)`): white noise per
-observation block (air data, angles, rates, gravity direction, heading, position, actuators)
-plus a rate bias drawn once per episode. `EpisodeConfig.observation_delay_steps` returns the
+`reset` and `step` take an optional `SensorNoise`: white noise per observation block plus gyro
+and accelerometer biases drawn once per episode. `sensor_noise_from_sensors(reference_speed,
+airspeed_std_m_s=..., gyro_std_rad_s=..., accelerometer_std_m_s2=..., attitude_std_rad=...,
+position_std_m=...)` builds it from datasheet units, so the conversion into observation units
+is the library's; `sensor_noise(...)` takes observation units directly. `EpisodeConfig.observation_delay_steps` returns the
 reading from that many control periods ago. Both are pure functions of the episode key, so a
 noisy episode is still reproducible and differentiable; the true observation is always
 available from `observation`.
@@ -109,10 +117,19 @@ good steps and survival alone earns nothing. `done` is crash or horizon; `info` 
 
 ## Gymnasium
 
-There is no Gymnasium dependency. A single-episode `gymnasium.Env` is a few lines over these
-functions: keep an `EnvState`, call `reset` with a fresh key in `reset(seed=...)`, call `step`
-in `step(action)`, and convert with `np.asarray`. Batched training loops should stay in JAX and
-vmap the functions directly; that is where the speed is.
+There is no Gymnasium dependency. `examples/gymnasium_shim.py` is a single-episode wrapper over
+these functions with the `reset(seed=...)` / `step(action)` contract: a `gymnasium.Env` with real
+spaces when the package is installed, a plain class with the same interface otherwise. Batched
+training loops should stay in JAX and vmap the functions directly; that is where the speed is.
+
+## Deployment
+
+A policy is a pure function of parameters and observation, so `jax.export` lowers it to a
+serialised StableHLO artifact that runs without Python at inference (XLA or IREE runtimes, or
+conversion to ONNX). `examples/export_policy.py` exports a policy for a fixed observation size,
+reloads the artifact, and checks it against the JAX call bit for bit: the sim-versus-onboard
+check a deployment needs before a first flight. Serialisation needs `flatbuffers` (in the dev
+group).
 
 ## Baseline
 

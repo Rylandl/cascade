@@ -523,3 +523,68 @@ def test_motor_out_mid_episode_costs_altitude_under_the_baseline(setup):
     assert float(failed.aircraft.actuators.propeller_speed[0]) < 0.1 * float(
         healthy.aircraft.actuators.propeller_speed[0]
     )
+
+
+def test_observation_spec_selects_blocks_and_adds_specific_force(setup):
+    from cascade.env import (
+        observation,
+        observation_layout,
+        observation_size,
+        onboard_observation,
+        sensor_noise_from_sensors,
+    )
+    from cascade.env.sensors import _noise_vectors
+
+    model, config, task, reference = setup
+    onboard = onboard_observation()
+    assert observation_size(model, onboard) == 1 + 3 + 3 + 2 + 3 + 3
+    layout = observation_layout(model, onboard)
+    assert layout.air_velocity is None and layout.surfaces is None
+    assert layout.specific_force == slice(12, 15) and layout.airspeed == slice(0, 1)
+    quiet = EpisodeConfig(
+        horizon_steps=10,
+        observation=onboard,
+        reset_position_std_m=0.0,
+        reset_velocity_std_m_s=0.0,
+        reset_attitude_std_rad=0.0,
+        reset_rate_std_rad_s=0.0,
+    )
+    state, obs = reset(model, quiet, task, reference, jax.random.PRNGKey(0))
+    assert obs.shape == (observation_size(model, onboard),)
+    # At the trim the accelerometer reads one g against gravity in body axes.
+    specific = obs[layout.specific_force]
+    assert abs(float(jnp.linalg.norm(specific)) - 1.0) < 0.05
+    assert float(specific[2]) < -0.9
+    assert jnp.allclose(obs, observation(model, task, reference, state, onboard))
+    # Noise from datasheet units lands in the right blocks of the selected layout.
+    noise = sensor_noise_from_sensors(12.0, airspeed_std_m_s=0.6, accelerometer_std_m_s2=0.98)
+    white, bias = _noise_vectors(model, noise, onboard)
+    assert white.shape == (observation_size(model, onboard),)
+    assert abs(float(white[layout.airspeed.start]) - 0.05) < 1e-6
+    assert abs(float(white[layout.specific_force.start]) - 0.1) < 1e-3
+    # The default spec is unchanged.
+    assert observation_size(model) == 17 + model.n_surfaces + model.n_propellers
+
+
+def test_isa_density_and_discrete_gust_reach_the_episode(setup):
+    from cascade.env.weather import isa_density, weather_condition
+
+    model, config, task, reference = setup
+    thin = EpisodeConfig(horizon_steps=20, isa_density=True, reset_position_std_m=0.0)
+    state, _ = reset(model, thin, task, reference, jax.random.PRNGKey(0))
+    assert abs(float(state.density) - float(isa_density(50.0))) < 1e-4
+    assert float(state.density) < 1.225
+    sea_level, _ = reset(model, config, task, reference, jax.random.PRNGKey(0))
+    assert abs(float(sea_level.density) - float(reference.environment.density)) < 1e-6
+
+    gusty = weather_condition(
+        0.0, 0.0, gust_amplitude_m_s=3.0, gust_start_s=0.1, gust_duration_s=0.2
+    )
+    state, _ = reset(model, config, task, reference, jax.random.PRNGKey(1), weather=gusty)
+    action = control_to_action(config, reference.control)
+    winds = []
+    for _ in range(12):
+        state, _, _, _, _ = step(model, config, task, reference, state, action, None, gusty)
+        winds.append(float(state.wind_ned[2]))
+    # 40 Hz: the gust window 0.1 to 0.3 s spans steps 4 to 12; its peak at 0.2 s is 3 m/s up.
+    assert min(winds) < -2.9 and abs(winds[0]) < 1e-6

@@ -23,6 +23,7 @@ import numpy as np
 from jax import Array
 
 from cascade.env.gusts import dryden_low_altitude, first_order_gust, second_order_gust
+from cascade.math import normalize
 
 REFERENCE_HEIGHT_M = 10.0
 GUST_STATE_SIZE = 5
@@ -30,13 +31,19 @@ GUST_STATE_SIZE = 5
 
 class WeatherCondition(NamedTuple):
     """Mean wind at 10 m (speed, direction it blows from, clockwise from north), the 20 ft
-    wind driving turbulence intensity, and the surface roughness length of the site."""
+    wind driving turbulence intensity, the surface roughness length of the site, a mean
+    updraft, and one discrete one-minus-cosine gust (amplitude, start time, duration,
+    direction in NED; zero amplitude means none)."""
 
     wind_speed_m_s: Array
     wind_from_rad: Array
     turbulence_wind_20ft_m_s: Array
     roughness_length_m: Array
     vertical_wind_m_s: Array
+    gust_amplitude_m_s: Array
+    gust_start_s: Array
+    gust_duration_s: Array
+    gust_direction_ned: Array
 
 
 def weather_condition(
@@ -46,9 +53,15 @@ def weather_condition(
     turbulence_wind_20ft_m_s: float | None = None,
     roughness_length_m: float = 0.03,
     vertical_wind_m_s: float = 0.0,
+    gust_amplitude_m_s: float = 0.0,
+    gust_start_s: float = 0.0,
+    gust_duration_s: float = 1.0,
+    gust_direction_ned: tuple[float, float, float] = (0.0, 0.0, -1.0),
 ) -> WeatherCondition:
     """``vertical_wind_m_s`` is a mean updraft (positive up), uniform with altitude: thermals,
-    ridge lift, or the vertical component a flight campaign inferred."""
+    ridge lift, or the vertical component a flight campaign inferred. The discrete gust is the
+    certification-standard one-minus-cosine shape: ``V(t) = A/2 (1 - cos(2 pi (t - t0) / T))``
+    for ``t0 <= t <= t0 + T``, along ``gust_direction_ned`` (an updraft by default)."""
 
     turbulence = wind_speed_m_s if turbulence_wind_20ft_m_s is None else turbulence_wind_20ft_m_s
     return WeatherCondition(
@@ -57,6 +70,10 @@ def weather_condition(
         turbulence_wind_20ft_m_s=jnp.asarray(turbulence),
         roughness_length_m=jnp.asarray(roughness_length_m),
         vertical_wind_m_s=jnp.asarray(vertical_wind_m_s),
+        gust_amplitude_m_s=jnp.asarray(gust_amplitude_m_s),
+        gust_start_s=jnp.asarray(gust_start_s),
+        gust_duration_s=jnp.asarray(gust_duration_s),
+        gust_direction_ned=normalize(jnp.asarray(gust_direction_ned, dtype=float)),
     )
 
 
@@ -83,6 +100,24 @@ def mean_wind_ned(condition: WeatherCondition, altitude_m: Array) -> Array:
     toward = condition.wind_from_rad + jnp.pi
     down = -condition.vertical_wind_m_s * jnp.ones_like(speed)  # NED: an updraft is negative down
     return jnp.stack((speed * jnp.cos(toward), speed * jnp.sin(toward), down), axis=-1)
+
+
+def discrete_gust_ned(condition: WeatherCondition, time_s: Array) -> Array:
+    """The one-minus-cosine discrete gust at ``time_s``, in NED; zero outside its window."""
+
+    phase = (jnp.asarray(time_s) - condition.gust_start_s) / jnp.maximum(
+        condition.gust_duration_s, 1e-6
+    )
+    inside = (phase >= 0.0) & (phase <= 1.0)
+    magnitude = 0.5 * condition.gust_amplitude_m_s * (1.0 - jnp.cos(2.0 * jnp.pi * phase))
+    return jnp.where(inside, magnitude, 0.0)[..., None] * condition.gust_direction_ned
+
+
+def isa_density(altitude_m: Array, sea_level_density_kg_m3: float = 1.225) -> Array:
+    """International Standard Atmosphere density in the troposphere (to 11 km)."""
+
+    ratio = jnp.maximum(1.0 - 2.25577e-5 * jnp.asarray(altitude_m), 1e-3)
+    return sea_level_density_kg_m3 * ratio**4.2559
 
 
 def initial_gust_state(batch_shape: tuple[int, ...] = ()) -> Array:
@@ -177,6 +212,10 @@ def sample_weather(
         turbulence_wind_20ft_m_s=records.gust_m_s[index],
         roughness_length_m=jnp.asarray(roughness_length_m),
         vertical_wind_m_s=jnp.zeros(()),
+        gust_amplitude_m_s=jnp.zeros(()),
+        gust_start_s=jnp.zeros(()),
+        gust_duration_s=jnp.ones(()),
+        gust_direction_ned=jnp.array([0.0, 0.0, -1.0]),
     )
 
 
@@ -202,11 +241,17 @@ def sample_weather_uniform(
         turbulence_wind_20ft_m_s=speed * ratio,
         roughness_length_m=jnp.asarray(roughness_length_m),
         vertical_wind_m_s=jnp.zeros(()),
+        gust_amplitude_m_s=jnp.zeros(()),
+        gust_start_s=jnp.zeros(()),
+        gust_duration_s=jnp.ones(()),
+        gust_direction_ned=jnp.array([0.0, 0.0, -1.0]),
     )
 
 
 __all__ = [
     "GUST_STATE_SIZE",
+    "discrete_gust_ned",
+    "isa_density",
     "WeatherCondition",
     "WeatherRecords",
     "initial_gust_state",

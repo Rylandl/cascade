@@ -17,6 +17,13 @@ from (clockwise from north) at 10 m; the 20 ft wind that sets MIL-F-8785C turbul
 `vertical_wind_m_s` is a mean updraft, positive up and uniform with altitude, for thermals, ridge
 lift, or the vertical component a flight campaign inferred.
 
+A discrete one-minus-cosine gust, the certification-standard shape, is one timed event on the
+condition: `gust_amplitude_m_s`, `gust_start_s`, `gust_duration_s`, and `gust_direction_ned` (an
+updraft by default); `discrete_gust_ned(condition, time)` evaluates it and the environment adds
+it to the wind every period. `isa_density(altitude)` is the standard-atmosphere density, used
+by the environment when `EpisodeConfig.isa_density` is set so a hot-and-high or a 3000 m sortie
+flies in thinner air.
+
 `weather_classes()` returns calm, light (7.7 m/s at 20 ft), moderate (15.4), and severe (23.2)
 conditions with a matching mean wind from the north.
 

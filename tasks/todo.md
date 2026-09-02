@@ -211,13 +211,18 @@ weather; Glassbox the adaptation and the metric.
 - [x] 11b `cascade.env.randomisation`: `randomisation(...)` ranges over named leaves plus a
       centre-of-mass shift; `sample_models(model, spec, key, n)`; latency randomises through
       `action_delay_range`
-- [ ] 11c observation spec (select blocks; IMU specific-force block; noise in sensor units)
+- [x] 11c `ObservationSpec` (block selection, `onboard_observation()` preset), a specific-force
+      block in g, `observation_layout/size(model, spec)`, `sensor_noise_from_sensors` in datasheet units
 - [x] 11d `cascade.env.faults`: `fault_schedule` / `apply_faults` (jam, hardover, motor-out, partial
       power as time-indexed actuator-leaf edits); `faults=` on step and rollouts; the policy is not told
 - [x] 11e `cascade.trajectory`: versioned npz with canonical states, actuators, separation,
       controls, and a provenance stamp; round-trip tested. The ULog loader is Glassbox's
-- [ ] 11f weather: 1-cos discrete gust, shear, density altitude, rotary gust components; action
-      jitter and dropped frames
+- [x] 11f weather: 1-cos discrete gust on the condition and ISA density (`EpisodeConfig.isa_density`,
+      `EnvState.density`) in the episode; shear is the log profile already. Not done: rotary gust
+      components (needs an angular wind in Environment), action jitter and dropped frames
+- [x] 11g `examples/gymnasium_shim.py` (dependency-free Gymnasium-style wrapper) and
+      `examples/export_policy.py` (jax.export StableHLO artifact, bit-for-bit check; flatbuffers in
+      the dev group)
 ## Phase 12: the thesis harness (proposed, with Glassbox)
 - [ ] frozen two-archetype manifest with hashes and splits; shipped station-record weather set;
       flight-minutes-to-baseline metric; three baselines incl. a non-adaptive family-trained

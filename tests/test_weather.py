@@ -73,3 +73,23 @@ def test_vertical_wind_is_an_updraft_in_ned():
     wind = mean_wind_ned(lifted, 10.0)
     assert float(wind[2]) == -1.5  # NED down is negative for an updraft
     assert float(mean_wind_ned(weather_condition(3.0, 0.0), 10.0)[2]) == 0.0
+
+
+def test_discrete_gust_is_one_minus_cosine_and_isa_density_falls_with_altitude():
+    from cascade.env.weather import discrete_gust_ned, isa_density
+
+    gusty = weather_condition(
+        0.0, 0.0, gust_amplitude_m_s=4.0, gust_start_s=2.0, gust_duration_s=1.0
+    )
+    assert float(jnp.linalg.norm(discrete_gust_ned(gusty, 1.9))) == 0.0
+    peak = discrete_gust_ned(gusty, 2.5)
+    assert (
+        abs(float(peak[2]) + 4.0) < 1e-5 and abs(float(peak[0])) < 1e-6
+    )  # an updraft, NED down negative
+    assert abs(float(discrete_gust_ned(gusty, 2.25)[2]) + 2.0) < 1e-5
+    assert float(jnp.linalg.norm(discrete_gust_ned(gusty, 3.1))) == 0.0
+    calm = weather_condition(3.0, 0.0)
+    assert float(jnp.linalg.norm(discrete_gust_ned(calm, 2.5))) == 0.0
+    assert abs(float(isa_density(0.0)) - 1.225) < 1e-6
+    assert abs(float(isa_density(1000.0)) - 1.112) < 0.002
+    assert float(isa_density(3000.0)) < float(isa_density(1000.0))

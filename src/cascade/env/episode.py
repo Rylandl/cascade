@@ -13,12 +13,22 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from cascade.dynamics import evaluate_dynamics
 from cascade.env.faults import FaultSchedule, apply_faults
-from cascade.env.sensors import SensorNoise, _noise_vectors, sensor_noise
+from cascade.env.sensors import (
+    GRAVITY_SCALE_M_S2,
+    ObservationSpec,
+    SensorNoise,
+    _noise_vectors,
+    block_sizes,
+    sensor_noise,
+)
 from cascade.env.tasks import ReferenceFlight, Task, reference_speed
 from cascade.env.weather import (
     WeatherCondition,
+    discrete_gust_ned,
     initial_gust_state,
+    isa_density,
     mean_wind_ned,
     step_gust,
 )
@@ -51,7 +61,10 @@ class EpisodeConfig:
     with. ``action_delay_steps`` applies the action commanded that many periods ago (the
     reference action until the buffer fills): sense-to-actuate latency. ``action_delay_range``
     draws the delay per episode, uniformly over the inclusive integer range, so latency is a
-    randomisable leaf; it overrides the fixed value.
+    randomisable leaf; it overrides the fixed value. ``observation`` selects the blocks a
+    policy sees (:class:`cascade.env.sensors.ObservationSpec`; everything by default).
+    ``isa_density`` replaces the reference environment's density with the standard
+    atmosphere at the aircraft's altitude every period.
     """
 
     simulation_frequency_hz: float = 400.0
@@ -67,6 +80,8 @@ class EpisodeConfig:
     observation_delay_steps: int = 0
     action_delay_steps: int = 0
     action_delay_range: tuple[int, int] | None = None
+    observation: ObservationSpec = ObservationSpec()
+    isa_density: bool = False
     step: StepFunction = rk4_step
 
     def __post_init__(self) -> None:
@@ -111,12 +126,19 @@ class EnvState(NamedTuple):
     wind_ned: Array
     action_buffer: Array
     action_delay: Array
+    density: Array
 
 
 def current_environment(reference: ReferenceFlight, state: EnvState) -> Environment:
-    """The reference environment with this step's wind (mean profile plus gust)."""
+    """The reference environment with this step's wind (mean profile plus gusts) and density."""
 
-    return reference.environment._replace(wind=state.wind_ned)
+    return reference.environment._replace(wind=state.wind_ned, density=state.density)
+
+
+def _density(config: EpisodeConfig, reference: ReferenceFlight, altitude_m: Array) -> Array:
+    if config.isa_density:
+        return isa_density(altitude_m)
+    return reference.environment.density
 
 
 def _quaternion_from_rotvec(rotvec: Array) -> Array:
@@ -152,7 +174,7 @@ def reset(
     if weather is None:
         wind = reference.environment.wind
     else:
-        wind = mean_wind_ned(weather, -position[..., 2])
+        wind = mean_wind_ned(weather, -position[..., 2]) + discrete_gust_ned(weather, 0.0)
     velocity = (
         rigid.velocity
         + (wind - reference.environment.wind)
@@ -169,7 +191,7 @@ def reset(
     aircraft = equilibrate_internal_state(
         model, perturbed, reference.control, reference.environment
     )
-    white, bias_std = _noise_vectors(model, noise)
+    white, bias_std = _noise_vectors(model, noise, config.observation)
     bias = bias_std * jax.random.normal(k_bias, bias_std.shape)
     partial = EnvState(
         aircraft=aircraft,
@@ -184,8 +206,9 @@ def reset(
             (config.max_action_delay + 1, action_size(model)),
         ),
         action_delay=_draw_action_delay(config, k_delay),
+        density=_density(config, reference, -position[..., 2]),
     )
-    sensed = _sense(model, task, reference, partial, white, k_noise)
+    sensed = _sense(model, task, reference, partial, white, k_noise, config.observation)
     buffer = jnp.broadcast_to(sensed, partial.observation_buffer.shape)
     state = partial._replace(observation_buffer=buffer)
     return state, buffer[0]
@@ -205,23 +228,31 @@ def _sense(
     state: EnvState,
     white: Array,
     key: Array,
+    spec: ObservationSpec | None = None,
 ) -> Array:
-    true = observation(model, task, reference, state)
+    true = observation(model, task, reference, state, spec)
     return true + state.sensor_bias + white * jax.random.normal(key, true.shape)
 
 
 def observation(
-    model: AircraftModel, task: Task, reference: ReferenceFlight, state: EnvState
+    model: AircraftModel,
+    task: Task,
+    reference: ReferenceFlight,
+    state: EnvState,
+    spec: ObservationSpec | None = None,
 ) -> Array:
     """Body-frame observation vector, independent of world position except through the error.
 
-    Layout: air velocity in body FRD over the reference speed (3), airspeed over the reference
-    speed, alpha, beta (3), body rates (3), gravity direction in body axes (3), heading error as
+    Blocks, in order when selected by ``spec`` (all but specific force by default): air
+    velocity in body FRD over the reference speed (3), airspeed over the reference speed (1),
+    alpha and beta (2), body rates (3), gravity direction in body axes (3), heading error as
     sin and cos (2), position error in body axes over 10 m (3), surface deflections (S),
-    propeller speeds as a fraction of maximum (P). Tracking tasks reference only altitude, so
-    their position error is vertical.
+    propeller speeds as a fraction of maximum (P), specific force in body axes in g (3): what
+    an accelerometer reads, the acceleration less gravity. Tracking tasks reference only
+    altitude, so their position error is vertical.
     """
 
+    spec = ObservationSpec() if spec is None else spec
     rigid = state.aircraft.rigid_body
     environment = current_environment(reference, state)
     air_body = quaternion_rotate_inverse(rigid.attitude, rigid.velocity - environment.wind)
@@ -232,57 +263,82 @@ def observation(
     heading_error = task.heading_error(rigid)
     position_error_body = quaternion_rotate_inverse(rigid.attitude, task.position_error(rigid))
     speed_scale = jnp.maximum(reference_speed(task), 1.0)
-    return jnp.concatenate(
-        (
-            air_body / speed_scale,
-            jnp.stack((airspeed / speed_scale, alpha, beta), axis=-1),
-            rigid.angular_velocity,
-            gravity_body,
-            jnp.stack((jnp.sin(heading_error), jnp.cos(heading_error)), axis=-1),
-            position_error_body / 10.0,
-            state.aircraft.actuators.surface_deflection,
-            state.aircraft.actuators.propeller_speed / model.actuators.propeller_speed_max,
-        ),
-        axis=-1,
-    )
+    blocks = {
+        "air_velocity": air_body / speed_scale,
+        "airspeed": (airspeed / speed_scale)[..., None],
+        "air_angles": jnp.stack((alpha, beta), axis=-1),
+        "rates": rigid.angular_velocity,
+        "gravity": gravity_body,
+        "heading": jnp.stack((jnp.sin(heading_error), jnp.cos(heading_error)), axis=-1),
+        "position_error": position_error_body / 10.0,
+        "surfaces": state.aircraft.actuators.surface_deflection,
+        "propellers": state.aircraft.actuators.propeller_speed
+        / model.actuators.propeller_speed_max,
+    }
+    if spec.specific_force:
+        # The velocity derivative depends on the actuator states, not on the command, so a zero
+        # control gives the current acceleration exactly.
+        zero = ControlInput(
+            propeller=jnp.zeros(model.n_propellers), channel=jnp.zeros(model.n_control_channels)
+        )
+        acceleration = evaluate_dynamics(
+            model, state.aircraft, zero, environment
+        ).derivative.rigid_body.velocity
+        specific = quaternion_rotate_inverse(rigid.attitude, acceleration - environment.gravity)
+        blocks["specific_force"] = specific / GRAVITY_SCALE_M_S2
+    selected = [blocks[name] for name in block_sizes(model) if getattr(spec, name)]
+    return jnp.concatenate(selected, axis=-1)
 
 
 class ObservationLayout(NamedTuple):
-    """Index slices of the observation vector from :func:`observation`."""
+    """Index slices of the observation vector from :func:`observation` (``None`` for a block
+    the spec leaves out)."""
 
-    air_velocity: slice
-    air_data: slice
-    rates: slice
-    gravity: slice
-    heading: slice
-    position_error: slice
-    surfaces: slice
-    propellers: slice
+    air_velocity: slice | None
+    airspeed: slice | None
+    air_angles: slice | None
+    rates: slice | None
+    gravity: slice | None
+    heading: slice | None
+    position_error: slice | None
+    surfaces: slice | None
+    propellers: slice | None
+    specific_force: slice | None
 
+    @property
+    def air_data(self) -> slice | None:
+        """Airspeed, alpha, beta together, when both blocks are present."""
 
-OBSERVATION_FIXED_SIZE = 17
-
-
-def observation_layout(model: AircraftModel) -> ObservationLayout:
-    """Where each block sits in the observation of ``model``."""
-
-    surfaces = model.n_surfaces
-    return ObservationLayout(
-        air_velocity=slice(0, 3),
-        air_data=slice(3, 6),
-        rates=slice(6, 9),
-        gravity=slice(9, 12),
-        heading=slice(12, 14),
-        position_error=slice(14, 17),
-        surfaces=slice(17, 17 + surfaces),
-        propellers=slice(17 + surfaces, 17 + surfaces + model.n_propellers),
-    )
+        if self.airspeed is None or self.air_angles is None:
+            return None
+        return slice(self.airspeed.start, self.air_angles.stop)
 
 
-def observation_size(model: AircraftModel) -> int:
-    """Length of the observation vector for ``model``."""
+OBSERVATION_FIXED_SIZE = 17  # the default spec's size without the surface and propeller blocks
 
-    return OBSERVATION_FIXED_SIZE + model.n_surfaces + model.n_propellers
+
+def observation_layout(
+    model: AircraftModel, spec: ObservationSpec | None = None
+) -> ObservationLayout:
+    """Where each block sits in the observation of ``model`` under ``spec``."""
+
+    spec = ObservationSpec() if spec is None else spec
+    slices = {}
+    offset = 0
+    for name, size in block_sizes(model).items():
+        if getattr(spec, name):
+            slices[name] = slice(offset, offset + size)
+            offset += size
+        else:
+            slices[name] = None
+    return ObservationLayout(**slices)
+
+
+def observation_size(model: AircraftModel, spec: ObservationSpec | None = None) -> int:
+    """Length of the observation vector for ``model`` under ``spec``."""
+
+    spec = ObservationSpec() if spec is None else spec
+    return sum(size for name, size in block_sizes(model).items() if getattr(spec, name))
 
 
 def action_size(model: AircraftModel) -> int:
@@ -368,7 +424,7 @@ def step(
     reward = jnp.where(crashed, 0.0, jnp.exp(-cost))
     noise = sensor_noise() if noise is None else noise
     key, k_noise, k_gust = jax.random.split(state.key, 3)
-    white, _ = _noise_vectors(model, noise)
+    white, _ = _noise_vectors(model, noise, config.observation)
     if weather is None:
         gust, wind = state.gust, state.wind_ned
     else:
@@ -382,7 +438,11 @@ def step(
             altitude_m=-rigid.position[..., 2],
             heading_rad=jnp.arctan2(air[..., 1], air[..., 0]),
         )
-        wind = mean_wind_ned(weather, -rigid.position[..., 2]) + gust_ned
+        wind = (
+            mean_wind_ned(weather, -rigid.position[..., 2])
+            + gust_ned
+            + discrete_gust_ned(weather, next_step / config.control_frequency_hz)
+        )
     advanced = state._replace(
         aircraft=aircraft,
         step=next_step,
@@ -390,8 +450,9 @@ def step(
         gust=gust,
         wind_ned=wind,
         action_buffer=action_buffer,
+        density=_density(config, reference, -rigid.position[..., 2]),
     )
-    sensed = _sense(model, task, reference, advanced, white, k_noise)
+    sensed = _sense(model, task, reference, advanced, white, k_noise, config.observation)
     buffer = jnp.concatenate((state.observation_buffer[1:], sensed[None]), axis=0)
     next_state = advanced._replace(observation_buffer=buffer)
     info = {"cost": cost, "crashed": crashed, "truncated": truncated, "applied_action": applied}

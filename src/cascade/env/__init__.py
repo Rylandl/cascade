@@ -28,7 +28,14 @@ from cascade.env.gusts import (
     dryden_wind_sequence,
 )
 from cascade.env.randomisation import Randomisation, randomisation, sample_models
-from cascade.env.sensors import SensorNoise, sensor_noise
+from cascade.env.sensors import (
+    ObservationSpec,
+    SensorNoise,
+    full_observation,
+    onboard_observation,
+    sensor_noise,
+    sensor_noise_from_sensors,
+)
 from cascade.env.tasks import (
     HoverTask,
     Reference,
@@ -61,6 +68,7 @@ __all__ = [
     "FaultSchedule",
     "OBSERVATION_FIXED_SIZE",
     "ObservationLayout",
+    "ObservationSpec",
     "Randomisation",
     "HoverTask",
     "Reference",
@@ -82,6 +90,7 @@ __all__ = [
     "dryden_wind_sequence",
     "family_member",
     "fault_schedule",
+    "full_observation",
     "hover_reference",
     "hover_task",
     "no_faults",
@@ -89,6 +98,7 @@ __all__ = [
     "observation",
     "observation_layout",
     "observation_size",
+    "onboard_observation",
     "randomisation",
     "reference_speed",
     "reset",
@@ -99,6 +109,7 @@ __all__ = [
     "sample_weather",
     "sample_weather_uniform",
     "sensor_noise",
+    "sensor_noise_from_sensors",
     "stack_pytrees",
     "step",
     "tracking_task",

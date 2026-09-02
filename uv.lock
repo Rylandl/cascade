@@ -35,6 +35,7 @@ viz = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "flatbuffers" },
     { name = "mujoco" },
     { name = "pytest" },
     { name = "ruff" },
@@ -51,6 +52,7 @@ provides-extras = ["viz"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "flatbuffers", specifier = ">=23.0" },
     { name = "mujoco", specifier = ">=3.1" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "ruff", specifier = ">=0.9" },
@@ -79,6 +81,14 @@ epath = [
     { name = "fsspec" },
     { name = "typing-extensions" },
     { name = "zipp" },
+]
+
+[[package]]
+name = "flatbuffers"
+version = "25.12.19"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/2d/d2a548598be01649e2d46231d151a6c56d10b964d94043a335ae56ea2d92/flatbuffers-25.12.19-py2.py3-none-any.whl", hash = "sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4", size = 26661, upload-time = "2025-12-19T23:16:13.622Z" },
 ]
 
 [[package]]
