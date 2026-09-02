@@ -129,7 +129,7 @@ def test_full_envelope_is_finite_and_cruise_trims_below_stall():
 
 def test_transition_corridor_has_a_continuous_thrust_borne_branch():
     model = tailsitter_reference()
-    speeds = (0.5, 1.0, 2.0, 3.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 8.0)
+    speeds = (0.5, 1.0, 2.0, 3.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0)
     seed = jnp.array([0.0, np.deg2rad(70.0), 0.0, 0.77, 0.77, 0.0, 0.0])
 
     thrust_borne = cascade_continue(model, speeds, seed)
@@ -140,7 +140,7 @@ def test_transition_corridor_has_a_continuous_thrust_borne_branch():
     pitches = [float(result.decision[1]) for result in thrust_borne]
     assert all(np.deg2rad(35.0) < pitch < np.deg2rad(75.0) for pitch in pitches)
     # The two branches coexist at cruise with very different incidence.
-    cruise_thrust_borne = thrust_borne[-2]  # 7 m/s
+    cruise_thrust_borne = thrust_borne[-1]  # 7 m/s
     cruise_conventional = conventional[-1]
     assert cruise_thrust_borne.angle_of_attack_rad > np.deg2rad(25.0)
     assert cruise_conventional.angle_of_attack_rad < np.deg2rad(10.0)

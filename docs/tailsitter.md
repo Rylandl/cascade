@@ -22,22 +22,44 @@ vehicle. Its numbers are plausible for a 1S micro airframe.
 
 `examples/tailsitter_corridor.py` traces the two straight-flight branches with
 `continue_trims`. The conventional branch exists above the fixture's stall speed of about
-6.5 m/s (alpha 3° at 9 m/s to 10° at 6.5 m/s). The thrust-borne branch continues from near
-hover all the way up through cruise:
+7 m/s (alpha 4° at 9 m/s to 10° at 7 m/s). The thrust-borne branch continues from near hover
+all the way up through cruise:
 
-| airspeed m/s | 0.5 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| pitch ° | 67 | 58 | 51 | 58 | 66 | 63 | 56 | 48 | 39 |
-| alpha ° | 67 | 58 | 51 | 58 | 64 | 56 | 44 | 34 | 26 |
-| throttle | 0.77 | 0.74 | 0.73 | 0.79 | 0.82 | 0.85 | 0.88 | 0.91 | 0.94 |
-| elevator (normalized) | 0.01 | −0.04 | −0.14 | −0.45 | −1.00 | −0.84 | −0.61 | −0.47 | −0.36 |
+| airspeed m/s | 0.5 | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| pitch ° | 72 | 62 | 54 | 61 | 59 | 56 | 50 | 42 |
+| alpha ° | 72 | 62 | 54 | 61 | 55 | 46 | 35 | 26 |
+| throttle | 0.78 | 0.76 | 0.74 | 0.79 | 0.81 | 0.84 | 0.86 | 0.88 |
+| elevator (normalized) | −0.05 | −0.10 | −0.20 | −0.54 | −0.51 | −0.45 | −0.35 | −0.28 |
 
-Two features matter for a transition controller. The branches coexist above 6.5 m/s with very
-different incidence, so a transition is a change of branch, not a slide along one. And around
-3 to 4.5 m/s the thrust-borne branch needs nearly full nose-up elevon: that is the
+Two features matter for a transition controller. The branches coexist above 7 m/s with very
+different incidence, so a transition is a change of branch, not a slide along one. And between
+3 and 4.5 m/s the thrust-borne branch needs about half nose-up elevon: that is the
 control-authority pinch where the wings are fully separated but the propwash over the inboard
-elevons is the only pitch authority. A schedule that lingers there stalls out of authority.
+elevons is the only pitch authority. (With a reflexed wing section, a positive camber moment,
+the pinch reached full deflection; the fixture uses a symmetric section so that hover needs no
+standing elevon trim.)
 
 The non-monotonic pitch (a minimum near 2 m/s) comes from the trade between propwash lift on
 the inboard panels, which supports weight at low speed, and post-stall wing lift, which grows
 with airspeed; both are outputs of the component model, not tuned in.
+
+## Hover and transition under closed-loop control
+
+`cascade.vtol` flies the fixture with the loops in `cascade.control`: hover guidance turns a
+position and velocity error into a thrust axis and throttle (with an integral so the wing's
+camber lift in its own propwash leaves no standing offset), the attitude and rate loops track
+that axis, and a transition is a scheduled forward tilt at high throttle with the forward-flight
+guidance blending in above the switch airspeed. `examples/tailsitter_transition.py` holds hover
+for two seconds, ramps to 7 m/s at 3.5 m/s², and cruises:
+
+| time s | 2 | 3 | 4 | 5 | 7 | 9 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| airspeed m/s | 0.1 | 2.7 | 7.0 | 7.7 | 7.3 | 7.1 |
+| tilt from vertical ° | 2.5 | 50 | 82 | 88 | 82 | 81 |
+| forward weight | 0 | 0 | 0.73 | 0.91 | 0.82 | 0.77 |
+| throttle | 0.80 | 0.93 | 0.70 | 0.55 | 0.59 | 0.61 |
+| altitude m | 1.34 | 1.71 | 3.04 | 2.62 | 1.89 | 1.98 |
+
+The whole rollout is one differentiable program, so the ramp acceleration or any gain can be
+tuned by gradient through the transition.

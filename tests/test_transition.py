@@ -1,0 +1,117 @@
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+import cascade
+from cascade.control import GuidanceSetpoint
+from cascade.math import quaternion_from_euler, quaternion_rotate
+from cascade.vtol import (
+    HoverSetpoint,
+    initial_transition_state,
+    tailsitter_reference_controller,
+    transition_rollout,
+    velocity_ramp_schedule,
+)
+
+DT = 0.01
+
+
+def setup():
+    spec = cascade.tailsitter_reference_spec()
+    model = spec.to_model()
+    environment = cascade.standard_environment()
+    state = cascade.zero_state(model, altitude=1.5)
+    state = state._replace(
+        rigid_body=state.rigid_body._replace(attitude=quaternion_from_euler(0.0, jnp.pi / 2.0, 0.0))
+    )
+    control = cascade.ControlInput(propeller=jnp.array([0.78, 0.78]), channel=jnp.zeros(2))
+    state = cascade.equilibrate_internal_state(model, state, control, environment)
+    return model, environment, tailsitter_reference_controller(spec), state
+
+
+def tilt_degrees(trajectory):
+    x_body = jax.vmap(lambda q: quaternion_rotate(q, jnp.array([1.0, 0.0, 0.0])))(
+        trajectory.rigid_body.attitude
+    )
+    return np.degrees(np.arccos(np.clip(np.asarray(-x_body[:, 2]), -1.0, 1.0)))
+
+
+def test_hover_hold_stays_put_upright_and_finite():
+    model, environment, controller, state = setup()
+    steps = 600
+    hover = HoverSetpoint(
+        position_ned=jnp.broadcast_to(jnp.array([0.0, 0.0, -1.5]), (steps, 3)),
+        velocity_ned=jnp.zeros((steps, 3)),
+        azimuth_rad=jnp.zeros(steps),
+        tilt_forward_rad=jnp.zeros(steps),
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.full(steps, 7.0),
+        altitude_m=jnp.full(steps, 1.5),
+        heading_rad=jnp.zeros(steps),
+    )
+
+    (final, _), (trajectory, controls, weight) = jax.jit(transition_rollout)(
+        model, controller, state, initial_transition_state(state), hover, forward, environment, DT
+    )
+
+    position = np.asarray(trajectory.rigid_body.position)
+    assert np.all(np.isfinite(position))
+    assert np.max(np.linalg.norm(position - np.array([0.0, 0.0, -1.5]), axis=1)) < 0.5
+    assert tilt_degrees(trajectory).max() < 10.0
+    assert float(jnp.max(weight)) < 0.05
+    assert float(jnp.max(jnp.abs(controls.channel))) < 0.3
+
+
+def transition(model, environment, controller, state, acceleration):
+    steps = 800
+    hover = velocity_ramp_schedule(
+        steps,
+        DT,
+        start_position_ned=jnp.array([0.0, 0.0, -1.5]),
+        heading_rad=jnp.array(0.0),
+        cruise_speed_m_s=jnp.array(7.0),
+        acceleration_m_s2=acceleration,
+        hold_steps=200,
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.full(steps, 7.0),
+        altitude_m=jnp.full(steps, 1.5),
+        heading_rad=jnp.zeros(steps),
+    )
+    return transition_rollout(
+        model, controller, state, initial_transition_state(state), hover, forward, environment, DT
+    )
+
+
+def test_transition_reaches_cruise_from_hover():
+    model, environment, controller, state = setup()
+    fly = jax.jit(
+        lambda acceleration: transition(model, environment, controller, state, acceleration)
+    )
+    (final, _), (trajectory, controls, weight) = fly(jnp.asarray(3.5))
+
+    position = np.asarray(trajectory.rigid_body.position)
+    speed = np.linalg.norm(np.asarray(trajectory.rigid_body.velocity), axis=1)
+    tilt = tilt_degrees(trajectory)
+    assert np.all(np.isfinite(position))
+    assert abs(speed[-1] - 7.0) < 1.0
+    assert tilt[-1] > 65.0
+    assert float(weight[-1]) > 0.5
+    assert np.max(-position[:, 2]) - 1.5 < 2.5
+    assert np.min(-position[:, 2]) > 1.0
+    assert float(jnp.max(jnp.abs(controls.channel))) <= 1.0
+    assert float(jnp.max(controls.propeller)) <= 1.0
+    # The forward blend engages only once airspeed builds.
+    assert float(jnp.max(weight[:250])) < 0.05
+
+
+def test_transition_is_differentiable_in_the_ramp_acceleration():
+    model, environment, controller, state = setup()
+
+    def final_speed_error(acceleration):
+        (final, _), _ = transition(model, environment, controller, state, acceleration)
+        return jnp.square(jnp.linalg.norm(final.rigid_body.velocity) - 7.0)
+
+    gradient = jax.jit(jax.grad(final_speed_error))(jnp.asarray(3.5))
+    assert jnp.isfinite(gradient)

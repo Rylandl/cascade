@@ -55,11 +55,17 @@ class HoverState(NamedTuple):
 
 
 class HoverSetpoint(NamedTuple):
-    """Where to be, how fast to move, and which azimuth the wing's belly should face."""
+    """Where to be, how fast to move, which azimuth the belly faces, and a scheduled tilt.
+
+    ``tilt_forward_rad`` rotates the thrust axis toward the azimuth on top of the limited
+    feedback tilt. It is how a transition is flown: a pitch ramp at high throttle carries the
+    airframe along its thrust-borne trim branch until the forward-flight loops take over.
+    """
 
     position_ned: Array
     velocity_ned: Array
     azimuth_rad: Array
+    tilt_forward_rad: Array = jnp.asarray(0.0)
 
 
 def default_hover_gains() -> HoverGains:
@@ -157,8 +163,22 @@ def hover_guidance(
     allowed = jnp.tan(gains.tilt_limit) * jnp.maximum(vertical, 1e-3)
     horizontal = horizontal * jnp.minimum(1.0, allowed / horizontal_norm)
     direction = normalize(vertical * up + horizontal)
+    # Scheduled tilt toward the azimuth: Rodrigues rotation about the horizontal axis
+    # perpendicular to travel, applied after the feedback so the feedback keeps its own limit.
+    azimuth = setpoint.azimuth_rad
+    along = jnp.stack((jnp.cos(azimuth), jnp.sin(azimuth), jnp.zeros_like(azimuth)), axis=-1)
+    axis = normalize(jnp.cross(up, along, axis=-1))
+    tilt = setpoint.tilt_forward_rad[..., None]
+    direction = (
+        direction * jnp.cos(tilt)
+        + jnp.cross(axis, direction, axis=-1) * jnp.sin(tilt)
+        + axis * jnp.sum(axis * direction, axis=-1, keepdims=True) * (1.0 - jnp.cos(tilt))
+    )
     attitude = thrust_direction_attitude(direction, setpoint.azimuth_rad)
-    thrust_total = model.mass * jnp.sum(specific_force * direction, axis=-1)
+    # Thrust from vertical balance: the up component of the tilted thrust must supply the up
+    # component of the required specific force. Capped where the axis nears horizontal.
+    cosine = jnp.maximum(jnp.sum(direction * up, axis=-1), jnp.cos(1.4))
+    thrust_total = model.mass * jnp.sum(specific_force * up, axis=-1) / cosine
     throttle = hover_throttle(model, thrust_total, environment.density)
     return attitude, throttle, HoverState(position_integral=position_integral)
 
@@ -172,13 +192,15 @@ def velocity_ramp_schedule(
     cruise_speed_m_s: Array,
     acceleration_m_s2: Array,
     hold_steps: int = 0,
+    tilt_at_cruise_rad: float = 1.0,
 ) -> HoverSetpoint:
     """Time-major hover setpoints that hold, then accelerate along a heading to cruise speed.
 
     Velocity ramps linearly at ``acceleration_m_s2`` after ``hold_steps`` and saturates at
-    ``cruise_speed_m_s``; position is the integral of that velocity from the start point, and
-    the wing's belly faces the heading throughout. This is the setpoint side of a hover-to-cruise
-    transition; the guidance law decides how far to tilt to follow it.
+    ``cruise_speed_m_s``; position is the integral of that velocity from the start point; the
+    wing's belly faces the heading throughout; and the scheduled forward tilt rises in
+    proportion to the commanded speed up to ``tilt_at_cruise_rad``. The feedback then only
+    corrects about that ramp.
     """
 
     time = jnp.arange(steps) * dt
@@ -200,6 +222,7 @@ def velocity_ramp_schedule(
         position_ned=position,
         velocity_ned=velocity,
         azimuth_rad=jnp.broadcast_to(heading_rad, (steps,)),
+        tilt_forward_rad=tilt_at_cruise_rad * speed / cruise_speed_m_s,
     )
 
 

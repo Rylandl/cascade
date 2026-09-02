@@ -69,10 +69,15 @@ Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-0
 ## Phase 6: control cascade and tailsitter flagship (started 2026-09-01)
 Direction: docs/architecture.md Milestone 3 and the thesis (fielded fixed-wing autonomy is VTOL
 fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated in the recap.
-- [ ] 6a `cascade/control.py`: rate PID, quaternion attitude P, airspeed/altitude/heading guidance,
+- [x] 6a `cascade/control.py`: rate PID, quaternion attitude P, airspeed/altitude/heading guidance,
       rate-scheduled composition, `closed_loop_rollout`, gains tuned by step-response tests on the
-      aerobatic reference and the X8, gradient through gains (dev agent)
+      aerobatic reference and the X8, gradient through gains (docs/control.md)
 - [x] 6b `aircraft/tailsitter_reference.toml`: washed/clean panels, hover balance, zero-airspeed
       authority, transition corridor with both trim branches (docs/tailsitter.md)
-- [ ] 6c transition example: hover -> cruise -> hover under the cascade, differentiated end to end
-      (hover guidance `cascade.vtol` and the velocity-ramp schedule are in; composition waits on 6a)
+- [x] 6c transition example: hover -> cruise under the cascade, differentiated end to end
+      (`examples/tailsitter_transition.py`, `tests/test_transition.py`: 2 s hover hold, 3.5 m/s^2
+      tilt ramp reaches 7 m/s at t = 4 s, cruise at 7.1 m/s with pitch ~9 deg, altitude excursion
+      < 1.6 m, finite gradient of final speed in the ramp acceleration)
+- [ ] 6d cruise -> hover back-transition (reverse the ramp; the thrust-borne branch is continuous
+      so the same scheduled tilt should work in reverse) and a hover-hold integrator gain pass
+      (the hold still drifts 0.15 m against the propwash camber lift before the integral catches it)
