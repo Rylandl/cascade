@@ -314,7 +314,9 @@ def flying_wing_spec(design: FlyingWingDesign, name: str = "archetype-flying-win
             parts.append((wing_mass * panel_area / area, position, chord, y1 - y0, 0.0))
     winglet_area = design.winglet_area_fraction * area
     tip_chord = root_chord * taper
-    if winglet_area > 0.0:
+    # Winglets are always present (zero area when unwanted) so every flying wing has the same
+    # surface count and a batch of designs is one vmap.
+    if True:
         height = winglet_area / (0.6 * tip_chord)
         for side, sign in (("left", -1.0), ("right", 1.0)):
             x_tip = -half * math.tan(design.sweep_rad) - x_cg
@@ -337,18 +339,21 @@ def flying_wing_spec(design: FlyingWingDesign, name: str = "archetype-flying-win
     thrust = design.thrust_to_weight * weight
     propellers = []
     if design.motors == "pusher":
+        # Two co-rotating halves of one pusher disk, so the propeller count matches the twin
+        # layout and a batch of designs is one vmap; the torques cancel like a coaxial pair.
         position = (-0.9 * root_chord - x_cg, 0.0, 0.0)
-        propellers.append(
-            _propeller(
-                "pusher",
-                position,
-                diameter,
-                thrust,
-                cruise_speed(design),
-                1.0,
-                tuple(0.0 for _ in surfaces),
+        for label, spin in (("pusher_a", 1.0), ("pusher_b", -1.0)):
+            propellers.append(
+                _propeller(
+                    label,
+                    position,
+                    diameter,
+                    0.5 * thrust,
+                    cruise_speed(design),
+                    spin,
+                    tuple(0.0 for _ in surfaces),
+                )
             )
-        )
         pod_mass = design.pod_mass_fraction * mass
     else:
         y_motor = 0.5 * diameter + 0.05 * half

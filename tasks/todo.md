@@ -157,5 +157,9 @@ weather; Glassbox the adaptation and the metric.
 - [x] 7c weather (2026-09-02): `cascade.weather` (log profile, classes, per-step Dryden gusts at
       the aircraft's altitude, station records CSV + sampling) wired into `cascade.env`
       reset/step/rollouts. Not done: discrete 1-cos gusts, ISA density with altitude.
-- [ ] 7d hidden-parameter protocol for Glassbox: the env exposes channel count and observations
-      only; design parameters are recorded alongside for analysis, never observed.
+- [x] 7d `cascade.family` (2026-09-02): `sample_family` -> stacked models/tasks/references/
+      auto-tuned controllers (fixed topology per archetype), one vmap per family with per-episode
+      weather; designs and reports kept as hidden truth. `examples/family_episode.py`.
+- [ ] 7e next: the Glassbox side (adaptation protocol across a family, the flight-minutes-to-
+      baseline metric); discrete 1-cos gusts and ISA density; a learned policy across a family
+      (imitation of the per-design baselines, then fine-tuning)

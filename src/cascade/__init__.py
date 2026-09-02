@@ -59,6 +59,7 @@ from cascade.env import (
     transition_task,
     trimmed_reference,
 )
+from cascade.family import Family, family_member, sample_family
 from cascade.gusts import (
     DrydenParameters,
     dryden_environment_sequence,
@@ -147,12 +148,15 @@ __all__ = [
     "conventional_spec",
     "cruise_speed",
     "design_spec",
+    "family_member",
     "flying_wing_spec",
     "sample_design",
     "sample_designs",
+    "sample_family",
     "validate_design",
     "EnvState",
     "EpisodeConfig",
+    "Family",
     "HoverTask",
     "Reference",
     "SensorNoise",

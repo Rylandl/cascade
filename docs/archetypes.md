@@ -67,3 +67,20 @@ The tuner settles the two packaged aircraft and all four nominal archetypes with
 heading and 0.15 m of altitude, and generalises to sampled designs (`tests/test_autotune.py`).
 `examples/archetypes.py` prints a table of sampled designs, their reports, and their tuned
 gains.
+
+## Families
+
+`cascade.family.sample_family(archetype, key, count)` draws valid designs, trims each at its
+cruise, tunes a cascade for each, and stacks models, tasks, references, and controllers along
+a family axis, so one `jax.vmap` over `cascade.env.reset`, `step`, or `rollout_policy` flies
+the whole family, each member under its own baseline and, with `cascade.weather`, in its own
+weather. Every flying wing has the same surface and propeller count whatever its layout
+(winglets of zero area when unwanted, a pusher as two co-located halves), and every
+conventional design likewise, which is what makes the stack possible. `family_member(family,
+index)` unbatches one member.
+
+The design parameters and reports stay on the `Family` as the hidden truth: an episode
+exposes the channel count and the observation, nothing else. `examples/family_episode.py`
+flies six designs of each archetype in random weather under their auto-tuned baselines and
+prints, beside each return, the span, mass, cruise speed, wind, and tuned gain the policy
+never saw.
