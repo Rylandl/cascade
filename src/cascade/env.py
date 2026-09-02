@@ -9,7 +9,8 @@ learning (vmap over thousands of episodes), trajectory optimisation (grad throug
 episode), and system identification (vmap over model parameters).
 
 The packaged tasks are reference tracking (hold an airspeed, altitude, and heading from a
-trim) and hover (hold a position and belly azimuth, for a tailsitter).
+trim), hover (hold a position and belly azimuth, for a tailsitter), and transition (from
+hover, reach and hold cruise).
 The reward is ``exp(-cost)`` in ``(0, 1]``, zero on the step an episode crashes, so an
 undiscounted return counts "good steps" and a policy that only survives earns nothing.
 """
@@ -48,7 +49,14 @@ from cascade.math import (
 )
 from cascade.model import AircraftModel
 from cascade.state import AircraftState, ControlInput, Environment
-from cascade.vtol import hover_throttle, thrust_direction_attitude
+from cascade.vtol import (
+    HoverSetpoint,
+    TransitionController,
+    TransitionState,
+    hover_throttle,
+    thrust_direction_attitude,
+    transition_step,
+)
 
 
 @dataclass(frozen=True)
@@ -163,7 +171,43 @@ class HoverTask(NamedTuple):
         )
 
 
-Task = TrackingTask | HoverTask
+class TransitionTask(NamedTuple):
+    """From hover, reach and hold a cruise airspeed, altitude, and heading: a tailsitter's
+    forward transition. Heading is the belly azimuth, defined in hover and in cruise alike."""
+
+    cruise_speed_m_s: Array
+    altitude_m: Array
+    heading_rad: Array
+    airspeed_weight: Array
+    altitude_weight: Array
+    heading_weight: Array
+    rate_weight: Array
+    effort_weight: Array
+
+    def heading_error(self, rigid) -> Array:
+        return _belly_azimuth(rigid.attitude) - self.heading_rad
+
+    def position_error(self, rigid) -> Array:
+        altitude_error = -rigid.position[..., 2] - self.altitude_m
+        zeros = jnp.zeros_like(altitude_error)
+        return jnp.stack((zeros, zeros, -altitude_error), axis=-1)
+
+    def cost(self, rigid, environment: Environment, action: Array) -> Array:
+        airspeed = safe_norm(rigid.velocity - environment.wind)
+        airspeed_error = (airspeed - self.cruise_speed_m_s) / jnp.maximum(
+            self.cruise_speed_m_s, 1.0
+        )
+        altitude_error = (-rigid.position[..., 2] - self.altitude_m) / 10.0
+        return (
+            self.airspeed_weight * jnp.square(airspeed_error)
+            + self.altitude_weight * jnp.square(altitude_error)
+            + self.heading_weight * (1.0 - jnp.cos(self.heading_error(rigid)))
+            + self.rate_weight * jnp.sum(jnp.square(rigid.angular_velocity), axis=-1)
+            + self.effort_weight * jnp.mean(jnp.square(action), axis=-1)
+        )
+
+
+Task = TrackingTask | HoverTask | TransitionTask
 
 
 class Reference(NamedTuple):
@@ -244,21 +288,50 @@ def hover_task(
     )
 
 
+def transition_task(
+    cruise_speed_m_s: float,
+    altitude_m: float,
+    heading_rad: float = 0.0,
+    *,
+    airspeed_weight: float = 1.0,
+    altitude_weight: float = 1.0,
+    heading_weight: float = 0.5,
+    rate_weight: float = 0.02,
+    effort_weight: float = 0.05,
+) -> TransitionTask:
+    return TransitionTask(
+        cruise_speed_m_s=jnp.asarray(cruise_speed_m_s),
+        altitude_m=jnp.asarray(altitude_m),
+        heading_rad=jnp.asarray(heading_rad),
+        airspeed_weight=jnp.asarray(airspeed_weight),
+        altitude_weight=jnp.asarray(altitude_weight),
+        heading_weight=jnp.asarray(heading_weight),
+        rate_weight=jnp.asarray(rate_weight),
+        effort_weight=jnp.asarray(effort_weight),
+    )
+
+
 def hover_reference(
-    model: AircraftModel, task: HoverTask, environment: Environment | None = None
+    model: AircraftModel, task: HoverTask | TransitionTask, environment: Environment | None = None
 ) -> Reference:
     """The static hover of a tailsitter: nose up, belly toward the azimuth, throttle balancing
     weight from the static thrust map, elevons neutral. Not a trim (a wing in its own propwash
-    carries a small camber force), so hold it with feedback."""
+    carries a small camber force), so hold it with feedback. A transition task hovers at its
+    altitude facing its heading."""
 
     environment = standard_environment() if environment is None else environment
+    if isinstance(task, TransitionTask):
+        position = jnp.array([0.0, 0.0, 0.0]).at[2].set(-task.altitude_m)
+        azimuth = task.heading_rad
+    else:
+        position, azimuth = task.position_ned, task.azimuth_rad
     up = -normalize(environment.gravity)
-    attitude = thrust_direction_attitude(up, task.azimuth_rad)
+    attitude = thrust_direction_attitude(up, azimuth)
     weight = model.mass * safe_norm(environment.gravity)
     throttle = hover_throttle(model, weight, environment.density)
     state = zero_state(model)
     state = state._replace(
-        rigid_body=state.rigid_body._replace(position=task.position_ned, attitude=attitude)
+        rigid_body=state.rigid_body._replace(position=position, attitude=attitude)
     )
     control = ControlInput(propeller=throttle, channel=jnp.zeros(model.n_control_channels))
     state = equilibrate_internal_state(model, state, control, environment)
@@ -302,7 +375,11 @@ def reset(
 def reference_speed(task: Task) -> Array:
     """Speed that normalises velocity observations: the tracking airspeed, or 1 m/s in hover."""
 
-    return task.airspeed_m_s if isinstance(task, TrackingTask) else jnp.asarray(1.0)
+    if isinstance(task, TrackingTask):
+        return task.airspeed_m_s
+    if isinstance(task, TransitionTask):
+        return task.cruise_speed_m_s
+    return jnp.asarray(1.0)
 
 
 def _nose_heading(attitude_xyzw: Array) -> Array:
@@ -507,3 +584,44 @@ def cascade_policy(
         return control_to_action(config, control), cascade_state
 
     return policy, initial_cascade_state(controller, reference.state, reference.control)
+
+
+def transition_policy(
+    controller: TransitionController,
+    model: AircraftModel,
+    config: EpisodeConfig,
+    task: TransitionTask,
+    reference: Reference,
+    hover_setpoints: HoverSetpoint,
+    forward_setpoints,
+):
+    """The transition controller as a policy: the baseline for a transition task.
+
+    ``hover_setpoints`` and ``forward_setpoints`` are time-major schedules of at least
+    ``horizon_steps`` entries (a :func:`cascade.vtol.velocity_ramp_schedule`, say); the policy
+    indexes them by the episode step and runs :func:`cascade.vtol.transition_step` at the
+    control rate. Returns the policy and its initial :class:`TransitionState`.
+    """
+
+    from cascade.vtol import initial_transition_state
+
+    period = 1.0 / config.control_frequency_hz
+    last = config.horizon_steps - 1
+
+    def policy(transition_state: TransitionState, obs: Array, env_state: EnvState):
+        index = jnp.minimum(env_state.step, last)
+        hover_setpoint = jax.tree.map(lambda leaf: leaf[index], hover_setpoints)
+        forward_setpoint = jax.tree.map(lambda leaf: leaf[index], forward_setpoints)
+        control, transition_state, _ = transition_step(
+            model,
+            controller,
+            transition_state,
+            hover_setpoint,
+            forward_setpoint,
+            env_state.aircraft,
+            reference.environment,
+            period,
+        )
+        return control_to_action(config, control), transition_state
+
+    return policy, initial_transition_state(reference.state)

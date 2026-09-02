@@ -110,8 +110,11 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       belly azimuth); body-frame position error joins the observation
 - [x] 6k `rollout_policy` + `cascade_policy` baseline (the cascade at the control rate; on the
       aerobatic tracking task from perturbed starts: no crashes, mean reward > 0.6, > 0.8 settled)
-- [ ] 6l candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
+- [x] 6l `TransitionTask` + `transition_policy` baseline (tailsitter hover -> 8 m/s at 100 Hz:
+      reaches cruise within 1.5 m/s, reward < 0.6 in the first second, > 0.7 in the last);
+      domain-randomisation recipe (vmap over `broadcast_model` batches) with a test
+- [ ] 6m candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
       flap-moment change (the campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set
-      (corridor, round trip, gusts); a transition task (hover -> cruise reward) for `cascade.env`
-      with the transition controller as its baseline; domain randomisation over model parameters
-      through `broadcast_model` in `reset`
+      (corridor, round trip, gusts); a small learned-policy demo on the tracking task (a JAX
+      policy-gradient or gradient-through-dynamics loop) to show the env end to end; sensor
+      models (noisy IMU, delayed observations) for the env

@@ -40,6 +40,7 @@ from cascade.env import (
     HoverTask,
     Reference,
     TrackingTask,
+    TransitionTask,
     action_size,
     action_to_control,
     cascade_policy,
@@ -52,6 +53,8 @@ from cascade.env import (
     rollout_policy,
     step,
     tracking_task,
+    transition_policy,
+    transition_task,
     trimmed_reference,
 )
 from cascade.gusts import (
@@ -127,6 +130,7 @@ __all__ = [
     "HoverTask",
     "Reference",
     "TrackingTask",
+    "TransitionTask",
     "action_size",
     "action_to_control",
     "cascade_policy",
@@ -139,6 +143,8 @@ __all__ = [
     "rollout_policy",
     "step",
     "tracking_task",
+    "transition_policy",
+    "transition_task",
     "trimmed_reference",
     "ActuatorModel",
     "AerodynamicSweep",

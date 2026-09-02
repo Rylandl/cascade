@@ -251,3 +251,54 @@ def test_episodes_vmap_over_randomised_models(setup):
     # The trim control lifts the light aircraft and lets the heavy one sink: the models differ.
     climb = -next_states.aircraft.rigid_body.velocity[:, 2]
     assert float(climb[0]) > float(climb[2])
+
+
+def test_transition_task_baseline_reaches_cruise_from_hover():
+    from cascade.control import GuidanceSetpoint
+    from cascade.env import hover_reference, rollout_policy, transition_policy, transition_task
+    from cascade.reference import tailsitter_reference, tailsitter_reference_spec
+    from cascade.vtol import tailsitter_reference_controller, velocity_ramp_schedule
+
+    spec = tailsitter_reference_spec()
+    model = tailsitter_reference()
+    task = transition_task(8.0, 1.5, 0.0)
+    reference = hover_reference(model, task)
+    config = EpisodeConfig(
+        control_frequency_hz=100.0,
+        horizon_steps=800,
+        reset_position_std_m=0.1,
+        reset_velocity_std_m_s=0.1,
+        reset_attitude_std_rad=0.03,
+        reset_rate_std_rad_s=0.05,
+        upright_limit_rad=3.2,
+    )
+    dt = 1.0 / config.control_frequency_hz
+    hover = velocity_ramp_schedule(
+        config.horizon_steps,
+        dt,
+        start_position_ned=jnp.array([0.0, 0.0, -1.5]),
+        heading_rad=jnp.array(0.0),
+        cruise_speed_m_s=jnp.array(8.0),
+        acceleration_m_s2=jnp.array(3.5),
+        hold_steps=200,
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.full(config.horizon_steps, 8.0),
+        altitude_m=jnp.full(config.horizon_steps, 1.5),
+        heading_rad=jnp.zeros(config.horizon_steps),
+    )
+    policy, policy_state = transition_policy(
+        tailsitter_reference_controller(spec), model, config, task, reference, hover, forward
+    )
+    state, first = reset(model, config, task, reference, jax.random.PRNGKey(3))
+    assert jnp.all(jnp.isfinite(first))
+    final, (observations, actions, rewards, dones) = jax.jit(
+        lambda s: rollout_policy(model, config, task, reference, s, policy, policy_state)
+    )(state)
+    assert jnp.all(jnp.isfinite(observations))
+    assert not bool(dones[:-1].any())
+    speed = float(jnp.linalg.norm(final.aircraft.rigid_body.velocity))
+    assert abs(speed - 8.0) < 1.5
+    # Hover earns little on a cruise task; cruise earns most of the reward.
+    assert float(jnp.mean(rewards[:100])) < 0.6
+    assert float(jnp.mean(rewards[-100:])) > 0.7
