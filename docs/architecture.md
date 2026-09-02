@@ -217,9 +217,12 @@ rendering and hardware adapters         boundary coordinate conversion
 ### Milestone 3 — autonomy tooling
 
 - Direct-actuator Gymnasium and native-JAX environments.
-- Done: `cascade.env` — native-JAX episode functions (reset, step, rollout) over a trimmed
-  reference-tracking task, batched by vmap and differentiable through the episode. See
-  `docs/environments.md`.
+- Done: `cascade.env` — native-JAX episode functions (reset, step, policy rollout) over
+  tracking, hover, and transition tasks with the control cascade and the transition controller
+  as baseline policies, batched by vmap (75k to 130k env steps/s on a laptop CPU) and
+  differentiable through the episode: a policy trained by gradient through the dynamics matches
+  the tuned cascade in sixty steps. Sensor noise, bias, and delay, and domain randomisation
+  over model batches. See `docs/environments.md`.
 - Rate, attitude, airspeed, altitude, and path controllers.
 - Done: `cascade.control` — a rate-scheduled rate/attitude/guidance cascade (PX4-style),
   differentiable and batchable, with a closed-loop rollout and tuned default controllers for both
