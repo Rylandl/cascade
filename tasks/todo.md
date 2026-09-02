@@ -212,9 +212,10 @@ weather; Glassbox the adaptation and the metric.
       centre-of-mass shift; `sample_models(model, spec, key, n)`; latency randomises through
       `action_delay_range`
 - [ ] 11c observation spec (select blocks; IMU specific-force block; noise in sensor units)
-- [ ] 11d failure-injection API (time-indexed faults on surfaces and propellers: jam, hardover,
-      motor-out, partial power)
-- [ ] 11e trajectory logging with a versioned schema (npz) and a canonical-state replay over Plant
+- [x] 11d `cascade.env.faults`: `fault_schedule` / `apply_faults` (jam, hardover, motor-out, partial
+      power as time-indexed actuator-leaf edits); `faults=` on step and rollouts; the policy is not told
+- [x] 11e `cascade.trajectory`: versioned npz with canonical states, actuators, separation,
+      controls, and a provenance stamp; round-trip tested. The ULog loader is Glassbox's
 - [ ] 11f weather: 1-cos discrete gust, shear, density altitude, rotary gust components; action
       jitter and dropped frames
 ## Phase 12: the thesis harness (proposed, with Glassbox)

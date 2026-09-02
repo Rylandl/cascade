@@ -485,3 +485,41 @@ def test_cascade_baseline_tolerates_a_period_of_latency_and_not_four(setup):
     assert crashes_one == 0 and reward_one > 0.5
     # A cascade tuned at zero delay is not latency-robust: 100 ms at 40 Hz crashes most of it.
     assert crashes_four > crashes_one
+
+
+def test_motor_out_mid_episode_costs_altitude_under_the_baseline(setup):
+    from cascade.control import aerobatic_reference_controller
+    from cascade.env import cascade_policy, fault_schedule, rollout_policy
+
+    model, config, task, reference = setup
+    quiet = EpisodeConfig(
+        horizon_steps=160,
+        reset_position_std_m=0.0,
+        reset_velocity_std_m_s=0.0,
+        reset_attitude_std_rad=0.0,
+        reset_rate_std_rad_s=0.0,
+    )
+    policy, policy_state = cascade_policy(
+        aerobatic_reference_controller(), model, quiet, task, reference
+    )
+    state, _ = reset(model, quiet, task, reference, jax.random.PRNGKey(0))
+    run = jax.jit(
+        lambda faults: rollout_policy(
+            model, quiet, task, reference, state, policy, policy_state, None, None, faults
+        )
+    )
+    healthy, (_, _, healthy_rewards, _) = run(fault_schedule(model))
+    failed, (observations, _, failed_rewards, _) = run(fault_schedule(model, motor_out={0: 1.0}))
+    assert jnp.all(jnp.isfinite(observations))
+    # The cascade holds altitude by trading airspeed for the first seconds of a glide.
+    healthy_altitude = float(-healthy.aircraft.rigid_body.position[2])
+    failed_altitude = float(-failed.aircraft.rigid_body.position[2])
+    assert healthy_altitude > failed_altitude + 0.5
+    healthy_speed = float(jnp.linalg.norm(healthy.aircraft.rigid_body.velocity))
+    failed_speed = float(jnp.linalg.norm(failed.aircraft.rigid_body.velocity))
+    assert failed_speed < healthy_speed - 1.5
+    assert float(jnp.mean(failed_rewards[-40:])) < float(jnp.mean(healthy_rewards[-40:]))
+    # The propeller has spun down.
+    assert float(failed.aircraft.actuators.propeller_speed[0]) < 0.1 * float(
+        healthy.aircraft.actuators.propeller_speed[0]
+    )

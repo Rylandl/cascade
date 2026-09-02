@@ -13,6 +13,7 @@ import jax
 import jax.numpy as jnp
 from jax import Array
 
+from cascade.env.faults import FaultSchedule, apply_faults
 from cascade.env.sensors import SensorNoise, _noise_vectors, sensor_noise
 from cascade.env.tasks import ReferenceFlight, Task, reference_speed
 from cascade.env.weather import (
@@ -319,6 +320,7 @@ def step(
     action: Array,
     noise: SensorNoise | None = None,
     weather: WeatherCondition | None = None,
+    faults: FaultSchedule | None = None,
 ) -> tuple[EnvState, Array, Array, Array, dict[str, Array]]:
     """Hold ``action`` for one control period; returns state, observation, reward, done, info.
 
@@ -327,7 +329,8 @@ def step(
     for the period is the mean profile at the aircraft's altitude plus a Dryden gust advanced
     from the episode key; without it the reference wind holds. With an action delay the
     action applied is an earlier one (``info["applied_action"]``); the cost still charges the
-    action commanded now.
+    action commanded now. ``faults`` (a :class:`cascade.env.faults.FaultSchedule`) applies
+    whatever has failed by this period's time to the actuators; the policy is not told.
 
     ``done`` is true on a crash (below ``crash_altitude_m``), on leaving the upright envelope
     (the body down axis more than ``upright_limit_rad`` from gravity), or at the horizon; the
@@ -343,8 +346,11 @@ def step(
     control = action_to_control(model, config, applied)
     controls = repeat_control(control, config.substeps)
     environment = current_environment(reference, state)
+    physics = model
+    if faults is not None:
+        physics = apply_faults(model, faults, state.step / config.control_frequency_hz)
     aircraft, _ = rollout(
-        model,
+        physics,
         state.aircraft,
         controls,
         environment,
@@ -401,6 +407,7 @@ def rollout_actions(
     actions: Array,
     noise: SensorNoise | None = None,
     weather: WeatherCondition | None = None,
+    faults: FaultSchedule | None = None,
 ) -> tuple[EnvState, tuple[Array, Array, Array]]:
     """Scan a time-major action sequence; returns the final state and (observations, rewards,
     dones). Rewards after the first ``done`` are zeroed, so the sum is the episode return."""
@@ -408,7 +415,7 @@ def rollout_actions(
     def scan_step(carry, action):
         state, finished = carry
         next_state, obs, reward, done, _ = step(
-            model, config, task, reference, state, action, noise, weather
+            model, config, task, reference, state, action, noise, weather, faults
         )
         reward = jnp.where(finished, 0.0, reward)
         return (next_state, finished | done), (obs, reward, done)
@@ -427,6 +434,7 @@ def rollout_policy(
     policy_state,
     noise: SensorNoise | None = None,
     weather: WeatherCondition | None = None,
+    faults: FaultSchedule | None = None,
 ) -> tuple[EnvState, tuple[Array, Array, Array, Array]]:
     """Scan a policy over the horizon; returns the final state and (observations, actions,
     rewards, dones), rewards zeroed after the first ``done``.
@@ -442,7 +450,7 @@ def rollout_policy(
         state, obs, policy_state, finished = carry
         action, policy_state = policy(policy_state, obs, state)
         next_state, next_obs, reward, done, _ = step(
-            model, config, task, reference, state, action, noise, weather
+            model, config, task, reference, state, action, noise, weather, faults
         )
         reward = jnp.where(finished, 0.0, reward)
         return (next_state, next_obs, policy_state, finished | done), (obs, action, reward, done)

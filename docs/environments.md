@@ -79,6 +79,16 @@ task from perturbed starts (8 episodes, 4 s): at 40 Hz it flies every episode wi
 latency, crashes 2 with 50 ms, 3 with 75 ms, and 7 with 100 ms; at 100 Hz it flies every
 episode up to the 40 ms tested.
 
+## Failures
+
+`fault_schedule(model, jams={surface: t}, hardovers={surface: (t, sign)}, motor_out={propeller:
+t}, partial_power={propeller: (t, fraction)})` builds a `FaultSchedule`; `step`, `rollout_actions`,
+and `rollout_policy` take it as `faults` and apply whatever has failed by each period's time to
+the actuators: a jam freezes a surface where it is, a hardover drives it to a limit at its own
+rate and holds it, a motor-out spins a propeller down, partial power derates it. The policy is
+not told. A batch of schedules is a batch of failure cases, and `apply_faults(model, schedule,
+time)` is the pure function underneath for use outside the environment.
+
 ## Weather
 
 `reset` and `step` take an optional `WeatherCondition` (`cascade.env.weather`): a mean wind with a

@@ -64,6 +64,7 @@ from cascade.spec import (
     save_aircraft_spec,
 )
 from cascade.state import AircraftState, ControlInput, Environment
+from cascade.trajectory import load_trajectory, save_trajectory
 
 __all__ = [
     "ActuatorModel",
@@ -105,11 +106,13 @@ __all__ = [
     "evaluate_dynamics",
     "linearize_step",
     "load_aircraft_spec",
+    "load_trajectory",
     "model_hash",
     "repeat_control",
     "rk4_step",
     "rollout",
     "save_aircraft_spec",
+    "save_trajectory",
     "skywalker_x8",
     "skywalker_x8_panels",
     "skywalker_x8_panels_spec",

@@ -300,6 +300,12 @@ commit, JAX and jaxlib versions, backend, platform, the x64 setting, hashes of t
 and of the compiled model, and the seed; `write_stamp` puts it beside a result. A documented
 number without its stamp is not reproducible.
 
+Trajectory files: `cascade.trajectory.save_trajectory` writes a time-major state sequence (the
+rigid body in the canonical 13-vector, actuator and separation states, the controls, a JSON
+metadata block with the schema version, timestep, and a provenance stamp) to a compressed
+`.npz`; `load_trajectory` reads it back. A flight log put into canonical state by a loader is
+the same file, so simulated and flown trajectories compare on equal terms.
+
 Two entry points wrap the core on purpose: `Plant` is the hardware-like boundary (canonical
 state, spec channel units, held commands) for identification tooling, and `cascade.env` is
 the learning boundary (normalised actions, body-frame observations, rewards).

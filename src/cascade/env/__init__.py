@@ -20,6 +20,7 @@ from cascade.env.episode import (
     step,
 )
 from cascade.env.family import Family, family_member, sample_family, stack_pytrees
+from cascade.env.faults import FaultSchedule, apply_faults, fault_schedule, no_faults
 from cascade.env.gusts import (
     DrydenParameters,
     dryden_environment_sequence,
@@ -57,6 +58,7 @@ __all__ = [
     "EnvState",
     "EpisodeConfig",
     "Family",
+    "FaultSchedule",
     "OBSERVATION_FIXED_SIZE",
     "ObservationLayout",
     "Randomisation",
@@ -71,6 +73,7 @@ __all__ = [
     "WeatherRecords",
     "action_size",
     "action_to_control",
+    "apply_faults",
     "cascade_policy",
     "control_to_action",
     "current_environment",
@@ -78,8 +81,10 @@ __all__ = [
     "dryden_low_altitude",
     "dryden_wind_sequence",
     "family_member",
+    "fault_schedule",
     "hover_reference",
     "hover_task",
+    "no_faults",
     "mean_wind_ned",
     "observation",
     "observation_layout",
