@@ -416,3 +416,16 @@ def test_weather_shifts_the_reset_velocity_and_gusts_the_episode(setup):
     assert float(jnp.std(final.wind_ned)) > 0.0 or float(jnp.linalg.norm(final.gust)) > 0.0
     assert abs(float(-final.aircraft.rigid_body.position[2]) - 50.0) < 5.0
     assert float(jnp.mean(rewards[-40:])) > 0.5
+
+
+def test_observation_size_and_layout_match_the_vector(setup):
+    from cascade.env import observation_layout, observation_size
+
+    model, config, task, reference = setup
+    state, obs = reset(model, config, task, reference, jax.random.PRNGKey(0))
+    assert obs.shape == (observation_size(model),)
+    layout = observation_layout(model)
+    assert layout.propellers.stop == observation_size(model)
+    assert obs[layout.surfaces].shape == (model.n_surfaces,)
+    # Gravity direction is a unit vector in body axes.
+    assert abs(float(jnp.linalg.norm(obs[layout.gravity])) - 1.0) < 1e-4

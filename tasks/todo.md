@@ -185,17 +185,20 @@ weather; Glassbox the adaptation and the metric.
 - [ ] 10a X8 numbers: re-score the variant grid with selection on disjoint maneuvers (fit 1-8,
       score 9-17), relabel the README headline (as-published 2.76; 0.68 is tuned), one number
       everywhere (README, docs/skywalker-x8.md, todo). Needs Glassbox's harness (user's agent).
-- [ ] 10b archetype defects found in review: parts mass sums to 1.06-1.08x (normalise the split);
-      sphere pod inertia (use a slender body); the static downwash fold scales C_mq and elevator
-      power along with the neutral point (document, then fix with a downwash map)
-- [ ] 10c trim channel bounds from the mapped physical limit, not +-1; diagnostic coefficient
-      airspeed floor; vertical mean wind; state the dtype policy and drop load-bearing-looking
-      float32 casts; frozen-field Dryden validity note at hover
-- [ ] 10d doc drift after 0.2: docs/control.md module path; env/baselines.py imports via the vtol
-      shim; cascade.env.gusts export; observation_size(model) and index constants; reset/step
-      return the same buffer end; precompute the actuator pseudo-inverse
-- [ ] 10e reproducibility: config-stamped run record (model hash, version, seed, dtype); scripts
-      that emit every documented table; GPU benchmark script; CITATION.cff; PyPI release
+- [x] 10b archetype defects: parts mass scaled to the aircraft mass; slender-body pod inertia; the
+      static downwash fold replaced by a real `downwash_map` in the spec/model/aerodynamics (two-pass
+      surface evaluation; zero map is bitwise the old single pass); conventional tail keeps its full
+      slope (pitch authority +15% on the nominal design)
+- [x] 10c trim channel bounds from the mapped physical limit (`channel_bounds`); diagnostic
+      coefficients report against a 1 m/s floor; `vertical_wind_m_s` in WeatherCondition; dtype
+      policy stated, float32 casts removed; Dryden-at-hover validity note
+- [x] 10d doc drift fixed; gusts exported from cascade.env with public filter names;
+      `observation_size` / `observation_layout`; reset and step return the same buffer end.
+      Deferred: precomputing the actuator pseudo-inverse (a 6x3 pinv per telemetry read; cheap)
+- [x] 10e reproducibility: `cascade.provenance` stamp (spec/model hashes, versions, backend, x64,
+      seed, git commit); `scripts/benchmark_env.py` (backend-aware, GPU-ready) and
+      `scripts/archetype_statistics.py` emit the documented tables; CITATION.cff; `uv build`
+      produces 0.2.0 wheels. Not done: publishing to PyPI (user's call), DOI (Zenodo on a tag)
 - [ ] 10f identifiability diagnostics from the existing Jacobians (Cramer-Rao, correlations)
 ## Phase 11: sim-to-real tooling (proposed)
 - [ ] action latency and jitter (mirror the observation delay), observation spec with an IMU block

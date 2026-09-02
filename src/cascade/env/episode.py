@@ -161,7 +161,7 @@ def reset(
     sensed = _sense(model, task, reference, partial, white, k_noise)
     buffer = jnp.broadcast_to(sensed, partial.observation_buffer.shape)
     state = partial._replace(observation_buffer=buffer)
-    return state, buffer[-1]
+    return state, buffer[0]
 
 
 def _sense(
@@ -211,6 +211,44 @@ def observation(
         ),
         axis=-1,
     )
+
+
+class ObservationLayout(NamedTuple):
+    """Index slices of the observation vector from :func:`observation`."""
+
+    air_velocity: slice
+    air_data: slice
+    rates: slice
+    gravity: slice
+    heading: slice
+    position_error: slice
+    surfaces: slice
+    propellers: slice
+
+
+OBSERVATION_FIXED_SIZE = 17
+
+
+def observation_layout(model: AircraftModel) -> ObservationLayout:
+    """Where each block sits in the observation of ``model``."""
+
+    surfaces = model.n_surfaces
+    return ObservationLayout(
+        air_velocity=slice(0, 3),
+        air_data=slice(3, 6),
+        rates=slice(6, 9),
+        gravity=slice(9, 12),
+        heading=slice(12, 14),
+        position_error=slice(14, 17),
+        surfaces=slice(17, 17 + surfaces),
+        propellers=slice(17 + surfaces, 17 + surfaces + model.n_propellers),
+    )
+
+
+def observation_size(model: AircraftModel) -> int:
+    """Length of the observation vector for ``model``."""
+
+    return OBSERVATION_FIXED_SIZE + model.n_surfaces + model.n_propellers
 
 
 def action_size(model: AircraftModel) -> int:

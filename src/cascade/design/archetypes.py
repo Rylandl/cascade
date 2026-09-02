@@ -4,7 +4,8 @@ An archetype maps the choices a designer actually makes (span, aspect ratio, win
 sweep, tail volumes, static margin, control-surface fractions, thrust-to-weight, ...) onto the
 panel backend through textbook relations: lift slope from aspect ratio (Helmbold), induced drag
 from span efficiency, flap effectiveness and flap moment from chord fraction (thin airfoil),
-static wing downwash folded into the tail, propwash weights from disk coverage, inertia from
+static wing downwash on the tail through the spec's downwash map, propwash weights from disk
+coverage, inertia from
 geometry and a mass split. The designs are plausible, not validated; their purpose is a family
 of visibly different airframes whose parameters a learner never sees.
 
@@ -246,10 +247,37 @@ def _plate_inertia(mass, centre, chord, width, height=0.0):
     return local + mass * (np.dot(r, r) * np.eye(3) - np.outer(r, r))
 
 
-def _inertia_from_parts(parts, pod_mass, pod_radius):
-    inertia = 0.4 * pod_mass * pod_radius**2 * np.eye(3)
+def parts_mass_fraction(parts, pod_mass, total_mass):
+    """How much mass the parts list carries before scaling, as a fraction of the total."""
+
+    return (sum(mass for mass, *_ in parts) + pod_mass) / total_mass
+
+
+def _inertia_from_parts(parts, pod_mass, pod_radius, pod_length=None, total_mass=None):
+    """Inertia about the centre of mass from thin-plate parts and a slender pod.
+
+    The part masses and the pod mass are scaled together so they sum exactly to
+    ``total_mass``; the pod is an ellipsoid of half-length ``pod_length / 2`` and radius
+    ``pod_radius`` (a sphere when no length is given), so a fuselage adds mostly to pitch and
+    yaw inertia rather than to roll.
+    """
+
+    parts_mass = sum(mass for mass, *_ in parts) + pod_mass
+    scale = 1.0 if total_mass is None else total_mass / parts_mass
+    pod = scale * pod_mass
+    if pod_length is None:
+        inertia = 0.4 * pod * pod_radius**2 * np.eye(3)
+    else:
+        half = 0.5 * pod_length
+        inertia = np.diag(
+            [
+                0.4 * pod * pod_radius**2,
+                0.2 * pod * (half**2 + pod_radius**2),
+                0.2 * pod * (half**2 + pod_radius**2),
+            ]
+        )
     for mass, centre, chord, width, height in parts:
-        inertia += _plate_inertia(mass, centre, chord, width, height)
+        inertia += _plate_inertia(scale * mass, centre, chord, width, height)
     inertia = 0.5 * (inertia + inertia.T)
     return tuple(tuple(float(v) for v in row) for row in inertia)
 
@@ -384,7 +412,9 @@ def flying_wing_spec(design: FlyingWingDesign, name: str = "archetype-flying-win
             )
             parts.append((0.05 * mass, (x_motor, sign * y_motor, 0.0), 0.0, 0.0, 0.0))
         pod_mass = (design.pod_mass_fraction - 0.1) * mass
-    inertia = _inertia_from_parts(parts, pod_mass, 0.25 * root_chord)
+    inertia = _inertia_from_parts(
+        parts, pod_mass, 0.25 * root_chord, pod_length=1.2 * root_chord, total_mass=mass
+    )
     return AircraftSpec(
         name=name,
         description=f"Flying-wing archetype: {design}",
@@ -419,14 +449,14 @@ def conventional_spec(
     horizontal_area = design.horizontal_tail_volume * area * mac / tail_arm
     vertical_area = design.vertical_tail_volume * area * b / tail_arm
     downwash_slope = 2.0 * slope / (math.pi * ar)
-    cruise_downwash = 2.0 * cruise_lift_coefficient(design) / (math.pi * ar)
     tail_ar = 4.0
-    tail_slope = wing_lift_slope(tail_ar) * (1.0 - downwash_slope)
+    tail_slope = wing_lift_slope(tail_ar)
+    tail_effectiveness = tail_slope * (1.0 - downwash_slope)  # for the neutral point only
     fin_slope = wing_lift_slope(1.8)
     # Neutral point from wing (at x = 0, its quarter chord) and tail with downwash.
     tail_x = -tail_arm
-    neutral_point = (tail_slope * horizontal_area * tail_x) / (
-        slope * area + tail_slope * horizontal_area
+    neutral_point = (tail_effectiveness * horizontal_area * tail_x) / (
+        slope * area + tail_effectiveness * horizontal_area
     )
     x_cg = neutral_point + design.static_margin * mac
     surfaces = []
@@ -465,7 +495,7 @@ def conventional_spec(
             _surface(
                 "horizontal_tail",
                 (tail_position_x, 0.0, 0.0),
-                rotation_y(-cruise_downwash),
+                rotation_y(0.0),
                 horizontal_area,
                 tail_chord,
                 lift_slope=tail_slope,
@@ -513,7 +543,7 @@ def conventional_spec(
         for side, sign in (("left", -1.0), ("right", 1.0)):
             y_c = sign * 0.5 * span_each * math.cos(dihedral)
             z_c = -0.5 * span_each * math.sin(dihedral)
-            frame = _matmul(rotation_x(-sign * dihedral), rotation_y(-cruise_downwash))
+            frame = rotation_x(-sign * dihedral)
             surfaces.append(
                 _surface(
                     f"{side}_v_tail",
@@ -530,6 +560,16 @@ def conventional_spec(
                 )
             )
             parts.append((0.04 * mass, (tail_position_x, y_c, z_c), panel_chord, span_each, 0.0))
+    # Static downwash on the tail surfaces from the wing panels, per unit of each panel's lift
+    # coefficient weighted by its share of the wing area: epsilon = 2 C_L,wing / (pi AR).
+    count = len(surfaces)
+    downwash_map = [[0.0] * count for _ in range(count)]
+    for j, downstream in enumerate(surfaces):
+        if "tail" not in downstream.name:
+            continue
+        for i, upstream in enumerate(surfaces):
+            if "wing" in upstream.name:
+                downwash_map[j][i] = 2.0 / (math.pi * ar) * upstream.area_m2 / area
     diameter = design.propeller_diameter_fraction * b
     weights = []
     for surface in surfaces:
@@ -554,7 +594,13 @@ def conventional_spec(
         ),
     )
     parts.append((0.1 * mass, nose, 0.0, 0.0, 0.0))
-    inertia = _inertia_from_parts(parts, design.pod_mass_fraction * mass, 0.3 * chord)
+    inertia = _inertia_from_parts(
+        parts,
+        design.pod_mass_fraction * mass,
+        0.3 * chord,
+        pod_length=tail_arm + 0.8 * chord,
+        total_mass=mass,
+    )
     return AircraftSpec(
         name=name,
         description=f"Conventional archetype: {design}",
@@ -566,6 +612,7 @@ def conventional_spec(
         control_channels=("aileron", "elevator", "rudder"),
         surfaces=tuple(surfaces),
         propellers=propellers,
+        downwash_map=tuple(tuple(row) for row in downwash_map),
     ).validate()
 
 

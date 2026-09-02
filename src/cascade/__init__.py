@@ -40,6 +40,7 @@ from cascade.model import (
     validate_model,
 )
 from cascade.plant import Plant, PlantConfig, PlantSample
+from cascade.provenance import model_hash, spec_hash, stamp, write_stamp
 from cascade.reference import (
     aerobatic_reference,
     aerobatic_reference_spec,
@@ -104,6 +105,7 @@ __all__ = [
     "evaluate_dynamics",
     "linearize_step",
     "load_aircraft_spec",
+    "model_hash",
     "repeat_control",
     "rk4_step",
     "rollout",
@@ -112,12 +114,15 @@ __all__ = [
     "skywalker_x8_panels",
     "skywalker_x8_panels_spec",
     "skywalker_x8_spec",
+    "spec_hash",
+    "stamp",
     "stability_modes",
     "standard_environment",
     "tailsitter_reference",
     "tailsitter_reference_spec",
     "trim_straight_flight",
     "validate_model",
+    "write_stamp",
     "zero_control",
     "zero_state",
 ]

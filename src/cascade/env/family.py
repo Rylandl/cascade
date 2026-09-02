@@ -96,7 +96,7 @@ def sample_family(
         tasks=stack_pytrees(tasks),
         references=stack_pytrees(references),
         controllers=stack_pytrees(controllers),
-        cruise_speeds_m_s=jnp.asarray(np.asarray(speeds, dtype=np.float32)),
+        cruise_speeds_m_s=jnp.asarray(np.asarray(speeds, dtype=float)),
         designs=tuple(designs),
         reports=tuple(reports),
     )

@@ -207,7 +207,7 @@ by running an actual closed-loop rollout and reading off the step response, in t
    feedback can pump energy into the roll/yaw coupling instead of damping it.
 
 Tuned numbers, and the model characteristics behind each choice, are documented in the docstrings
-of `aerobatic_reference_controller()` and `skywalker_x8_controller()` in `cascade/control.py`.
+of `aerobatic_reference_controller()` and `skywalker_x8_controller()` in `cascade/control/tuned.py`.
 
 ## Differentiable tuning
 

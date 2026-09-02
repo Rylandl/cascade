@@ -74,3 +74,22 @@ def test_zero_area_surface_is_valid_and_produces_no_force():
 
     assert jnp.allclose(result.aerodynamics.force_per_surface[0], 0.0)
     assert jnp.linalg.norm(result.aerodynamics.force_per_surface[1]) > 0.0
+
+
+def test_inertia_validation_accepts_float32_products_and_rejects_impossible_tensors():
+    from dataclasses import replace
+
+    import numpy as np
+    import pytest
+
+    import cascade
+
+    spec = cascade.aerobatic_reference_spec()
+    # A larger, coupled but physical tensor: the float32 inverse product is not exact to 1e-8.
+    big = ((1.3, 0.0, -0.06), (0.0, 0.8, 0.0), (-0.06, 0.0, 0.6))
+    replace(spec, inertia_kg_m2=big).to_model()
+    # One principal moment above the sum of the other two cannot come from any mass distribution.
+    impossible = ((0.1, 0.0, 0.0), (0.0, 0.1, 0.0), (0.0, 0.0, 0.5))
+    with pytest.raises(ValueError, match="triangle"):
+        replace(spec, inertia_kg_m2=impossible).to_model()
+    assert np.all(np.linalg.eigvalsh(np.asarray(big)) > 0.0)

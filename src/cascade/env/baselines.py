@@ -79,7 +79,7 @@ def transition_policy(
     control rate. Returns the policy and its initial :class:`TransitionState`.
     """
 
-    from cascade.vtol import initial_transition_state
+    from cascade.control.vtol import initial_transition_state
 
     period = 1.0 / config.control_frequency_hz
     last = config.horizon_steps - 1

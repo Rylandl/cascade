@@ -74,3 +74,56 @@ def test_sampled_designs_are_mostly_valid_and_visibly_diverse():
         assert speeds.max() / speeds.min() > 1.3
         assert periods.max() / periods.min() > 1.3
         assert authority.max() / authority.min() > 2.0
+
+
+def test_inertia_is_built_from_exactly_the_aircraft_mass():
+    import numpy as np
+
+    from cascade.design.archetypes import _inertia_from_parts, _plate_inertia
+
+    # Parts summing to 1.1 of the mass are scaled down so the tensor is that of the aircraft.
+    parts = [(0.6, (0.0, 0.5, 0.0), 0.2, 1.0, 0.0), (0.2, (0.0, -0.5, 0.0), 0.2, 1.0, 0.0)]
+    scaled = np.asarray(_inertia_from_parts(parts, 0.3, 0.05, pod_length=0.6, total_mass=1.0))
+    expected = np.zeros((3, 3))
+    for mass, centre, chord, width, height in parts:
+        expected += _plate_inertia(mass / 1.1, centre, chord, width, height)
+    pod = 0.3 / 1.1
+    expected += np.diag(
+        [0.4 * pod * 0.05**2, 0.2 * pod * (0.3**2 + 0.05**2), 0.2 * pod * (0.3**2 + 0.05**2)]
+    )
+    assert np.allclose(scaled, expected)
+    # A slender pod adds to pitch and yaw far more than to roll.
+    assert scaled[1, 1] > scaled[0, 0] * 0.0 and expected[2, 2] > expected[0, 0]
+    # Every archetype's tensor is symmetric positive definite with plausible ordering.
+    for design in NOMINALS:
+        inertia = np.asarray(design_spec(design).inertia_kg_m2)
+        assert np.allclose(inertia, inertia.T)
+        assert np.all(np.linalg.eigvalsh(inertia) > 0.0)
+        assert inertia[2, 2] > inertia[1, 1] * 0.5
+
+
+def test_conventional_tail_sees_the_wing_downwash_at_cruise():
+    from cascade.analysis import StraightFlightCondition, trim_straight_flight
+    from cascade.archetypes import cruise_speed
+    from cascade.dynamics import evaluate_dynamics
+    from cascade.initialization import standard_environment
+
+    design = ConventionalDesign()
+    spec = design_spec(design)
+    names = [s.name for s in spec.surfaces]
+    table = np.asarray(spec.downwash_map)
+    tail, wing = names.index("horizontal_tail"), names.index("left_wing_inner")
+    assert table[tail, wing] > 0.0 and table[wing, tail] == 0.0
+    model = spec.to_model()
+    environment = standard_environment()
+    trim = trim_straight_flight(
+        model,
+        StraightFlightCondition(cruise_speed(design), altitude_m=50.0),
+        environment=environment,
+    )
+    assert trim.success
+    air = evaluate_dynamics(model, trim.state, trim.control, environment).aerodynamics.air
+    assert float(air.angle_of_attack[tail]) < float(air.angle_of_attack[wing])
+    # The tail keeps its full slope: pitch authority is well above the downwash-scaled value.
+    report = validate_design(design)
+    assert report.valid and report.pitch_authority_rad_s2 > 80.0

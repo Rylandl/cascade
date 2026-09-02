@@ -89,6 +89,11 @@ Cm_att = Cm0 + Cma alpha + Cm_flap delta_flap
 alpha_sep = alpha + tau delta_flap                  flat-plate incidence
 ```
 
+Surfaces behind a lifting surface see static downwash, `alpha_eff_j = alpha_j - sum_i D_ji C_L,i`
+with `D` the spec's `downwash_map` (zero by default): the upstream lift is evaluated once at the
+geometric incidence, then every surface at its effective incidence, so a wing's collapsing
+lift in stall takes the tail's downwash with it.
+
 The attached model is a conventional lift-slope, profile-drag, induced-drag, and pitching-moment
 model. The separated model approaches flat-plate behavior at the flapped incidence and remains
 defined for the entire `atan2` angle range, so a stalled aileron or elevator keeps the reduced
@@ -282,6 +287,15 @@ be batched, differentiated, and stacked; anything static (`EpisodeConfig`, `Plan
 archetype designs) is a frozen dataclass of Python scalars, a compile-time constant that
 closures capture. Host-side solves (trim, tuning, validation) return dataclasses with Python
 numbers; device-side functions return pytrees.
+
+Numerics: JAX's default float32 is the working precision and no cast forces it; with
+`jax_enable_x64` everything runs in float64 (the trim, linearisation, and identification paths
+benefit). Every function is deterministic given its PRNG key.
+
+Provenance: `cascade.provenance.stamp(spec, model, seed=...)` records the package version, git
+commit, JAX and jaxlib versions, backend, platform, the x64 setting, hashes of the specification
+and of the compiled model, and the seed; `write_stamp` puts it beside a result. A documented
+number without its stamp is not reproducible.
 
 Two entry points wrap the core on purpose: `Plant` is the hardware-like boundary (canonical
 state, spec channel units, held commands) for identification tooling, and `cascade.env` is

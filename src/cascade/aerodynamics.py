@@ -347,14 +347,17 @@ def body_aerodynamics(
         axis=-1,
     )
     moment_body = jnp.stack((roll_moment, pitch_moment, yaw_moment), axis=-1)
+    # Diagnostic coefficients only (the forces above never divide by airspeed): report the
+    # rate terms against an airspeed floored at 1 m/s so a near-hover sweep does not spike.
+    reporting_speed = jnp.maximum(airspeed, 1.0)
     coefficients = jnp.stack(
         (
-            lift_static + lift_rate / airspeed,
-            drag_static + drag_rate / airspeed,
-            side_static + side_rate / airspeed,
-            roll_static + roll_rate / airspeed,
-            pitch_static + pitch_rate / airspeed,
-            yaw_static + yaw_rate / airspeed,
+            lift_static + lift_rate / reporting_speed,
+            drag_static + drag_rate / reporting_speed,
+            side_static + side_rate / reporting_speed,
+            roll_static + roll_rate / reporting_speed,
+            pitch_static + pitch_rate / reporting_speed,
+            yaw_static + yaw_rate / reporting_speed,
         ),
         axis=-1,
     )
@@ -379,13 +382,30 @@ def aerodynamics(
 
     surfaces = model.surfaces
     air, frames = surface_air_data(model, state, environment, air_velocity_body, induced_velocity)
+    deflection = state.actuators.surface_deflection
+    # Static downwash: a surface behind a lifting surface sees the flow turned down by an angle
+    # proportional to the upstream lift coefficient (``downwash_map[j, i]`` per unit C_L of
+    # surface i). Two passes: the upstream lift from the geometric incidence, then every
+    # surface at its effective incidence. A zero map reproduces the single pass exactly, and
+    # a stalled wing's collapsing lift takes its downwash with it.
+    upstream_lift, _, _ = aerodynamic_coefficients(
+        model, state.aero, air.angle_of_attack, deflection
+    )
+    downwash = jnp.einsum("...ji,...i->...j", surfaces.downwash_map, upstream_lift)
+    effective_angle = air.angle_of_attack - downwash
+    air = air._replace(
+        angle_of_attack=effective_angle,
+        separation_equilibrium=sigmoid(
+            (smooth_abs(effective_angle) - surfaces.stall_angle) / surfaces.stall_width
+        ),
+    )
     lift_coefficient, drag_coefficient, moment_coefficient = aerodynamic_coefficients(
-        model, state.aero, air.angle_of_attack, state.actuators.surface_deflection
+        model, state.aero, effective_angle, deflection
     )
 
     lift = air.dynamic_pressure * surfaces.area * lift_coefficient
     drag = air.dynamic_pressure * surfaces.area * drag_coefficient
-    sine, cosine = jnp.sin(air.angle_of_attack), jnp.cos(air.angle_of_attack)
+    sine, cosine = jnp.sin(effective_angle), jnp.cos(effective_angle)
 
     force_axial = -drag * cosine + lift * sine
     force_normal = -drag * sine - lift * cosine

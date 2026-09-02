@@ -294,19 +294,37 @@ _compiled_scaled_balance = jax.jit(_scaled_balance)
 _compiled_balance_jacobian = jax.jit(jax.jacfwd(_scaled_balance, argnums=3))
 
 
+def channel_bounds(model: AircraftModel) -> np.ndarray:
+    """Per-channel magnitude beyond which no driven surface can move further: the smallest
+    physical limit over gain among the surfaces a channel drives (1.0 for an undriven
+    channel). Channels are in the specification's own units, so this is right whether they
+    are normalised or radians."""
+
+    surface_map = np.asarray(model.actuators.surface_map, dtype=float)
+    limits = np.asarray(model.actuators.surface_limit, dtype=float)
+    bounds = np.ones(model.n_control_channels)
+    for channel in range(model.n_control_channels):
+        gains = np.abs(surface_map[:, channel])
+        driven = gains > 1e-9
+        if np.any(driven):
+            bounds[channel] = float(np.min(limits[driven] / gains[driven]))
+    return bounds
+
+
 def _decision_bounds(model: AircraftModel) -> tuple[np.ndarray, np.ndarray]:
+    channels = channel_bounds(model)
     lower = np.concatenate(
         (
             np.array([-np.deg2rad(80.0), -np.deg2rad(89.0), -np.deg2rad(30.0)]),
             np.zeros(model.n_propellers),
-            -np.ones(model.n_control_channels),
+            -channels,
         )
     )
     upper = np.concatenate(
         (
             np.array([np.deg2rad(80.0), np.deg2rad(89.0), np.deg2rad(30.0)]),
             np.ones(model.n_propellers),
-            np.ones(model.n_control_channels),
+            channels,
         )
     )
     return lower, upper

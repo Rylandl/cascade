@@ -40,6 +40,9 @@ states, observations, rewards, dones, info = env_step(states, actions)   # actio
 
 ## Observation
 
+`observation_size(model)` gives the length and `observation_layout(model)` the slice of each
+block, so a policy or an ablation never hardcodes offsets.
+
 Body-frame, so a policy never sees world position except through the altitude error:
 
 | slice | content |
@@ -133,7 +136,8 @@ unchanged on a batch of randomised models, which is how a robust policy is train
 
 ## Throughput
 
-One control step is ten RK4 sub-steps of the full model (six-surface panels, actuator lags,
+`scripts/benchmark_env.py` emits this table for the current backend (run it on a GPU host for a
+GPU row). One control step is ten RK4 sub-steps of the full model (six-surface panels, actuator lags,
 stall dynamics, propeller inflow) at 400 Hz. Measured on an Apple M3 CPU while the machine was
 also running other work, so these are conservative:
 

@@ -45,3 +45,19 @@ def test_continuation_tracks_conventional_and_high_alpha_branches():
     )
     assert min(result.angle_of_attack_rad for result in high_alpha) > np.deg2rad(50.0)
     assert max(result.angle_of_attack_rad for result in high_alpha) > np.deg2rad(70.0)
+
+
+def test_trim_channel_bounds_follow_the_mapped_physical_limits():
+    import numpy as np
+
+    from cascade.analysis.trim import channel_bounds
+    from cascade.reference import aerobatic_reference, skywalker_x8
+
+    # Normalised channels: limit over gain exceeds one; radian channels (the X8): the bound is
+    # the surface limit itself, not a hard-coded one radian.
+    normalised = channel_bounds(aerobatic_reference())
+    assert np.all(normalised > 1.0)
+    x8 = skywalker_x8()
+    bounds = channel_bounds(x8)
+    assert np.all(bounds <= np.max(np.asarray(x8.actuators.surface_limit)) + 1e-9)
+    assert np.all(bounds < 1.0)

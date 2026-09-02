@@ -222,7 +222,7 @@ def hover_task(
     effort_weight: float = 0.05,
 ) -> HoverTask:
     return HoverTask(
-        position_ned=jnp.asarray(position_ned, dtype=jnp.float32),
+        position_ned=jnp.asarray(position_ned),
         azimuth_rad=jnp.asarray(azimuth_rad),
         position_weight=jnp.asarray(position_weight),
         velocity_weight=jnp.asarray(velocity_weight),

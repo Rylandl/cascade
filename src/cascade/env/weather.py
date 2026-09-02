@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax import Array
 
-from cascade.env.gusts import _first_order, _second_order, dryden_low_altitude
+from cascade.env.gusts import dryden_low_altitude, first_order_gust, second_order_gust
 
 REFERENCE_HEIGHT_M = 10.0
 GUST_STATE_SIZE = 5
@@ -36,6 +36,7 @@ class WeatherCondition(NamedTuple):
     wind_from_rad: Array
     turbulence_wind_20ft_m_s: Array
     roughness_length_m: Array
+    vertical_wind_m_s: Array
 
 
 def weather_condition(
@@ -44,13 +45,18 @@ def weather_condition(
     *,
     turbulence_wind_20ft_m_s: float | None = None,
     roughness_length_m: float = 0.03,
+    vertical_wind_m_s: float = 0.0,
 ) -> WeatherCondition:
+    """``vertical_wind_m_s`` is a mean updraft (positive up), uniform with altitude: thermals,
+    ridge lift, or the vertical component a flight campaign inferred."""
+
     turbulence = wind_speed_m_s if turbulence_wind_20ft_m_s is None else turbulence_wind_20ft_m_s
     return WeatherCondition(
-        wind_speed_m_s=jnp.asarray(wind_speed_m_s, jnp.float32),
-        wind_from_rad=jnp.asarray(wind_from_rad, jnp.float32),
-        turbulence_wind_20ft_m_s=jnp.asarray(turbulence, jnp.float32),
-        roughness_length_m=jnp.asarray(roughness_length_m, jnp.float32),
+        wind_speed_m_s=jnp.asarray(wind_speed_m_s),
+        wind_from_rad=jnp.asarray(wind_from_rad),
+        turbulence_wind_20ft_m_s=jnp.asarray(turbulence),
+        roughness_length_m=jnp.asarray(roughness_length_m),
+        vertical_wind_m_s=jnp.asarray(vertical_wind_m_s),
     )
 
 
@@ -75,13 +81,12 @@ def mean_wind_ned(condition: WeatherCondition, altitude_m: Array) -> Array:
     profile = jnp.log(height / z0) / jnp.log(REFERENCE_HEIGHT_M / z0)
     speed = condition.wind_speed_m_s * jnp.maximum(profile, 0.0)
     toward = condition.wind_from_rad + jnp.pi
-    return jnp.stack(
-        (speed * jnp.cos(toward), speed * jnp.sin(toward), jnp.zeros_like(speed)), axis=-1
-    )
+    down = -condition.vertical_wind_m_s * jnp.ones_like(speed)  # NED: an updraft is negative down
+    return jnp.stack((speed * jnp.cos(toward), speed * jnp.sin(toward), down), axis=-1)
 
 
 def initial_gust_state(batch_shape: tuple[int, ...] = ()) -> Array:
-    return jnp.zeros((*batch_shape, GUST_STATE_SIZE), jnp.float32)
+    return jnp.zeros((*batch_shape, GUST_STATE_SIZE))
 
 
 def step_gust(
@@ -102,16 +107,16 @@ def step_gust(
     """
 
     parameters = dryden_low_altitude(altitude_m, condition.turbulence_wind_20ft_m_s)
-    airspeed = jnp.maximum(jnp.asarray(airspeed_m_s, jnp.float32), 1.0)
+    airspeed = jnp.maximum(jnp.asarray(airspeed_m_s), 1.0)
     tau_u = parameters.length_u / airspeed
     tau_v = parameters.length_v / airspeed
     tau_w = parameters.length_w / airspeed
-    noise = jax.random.normal(key, (*gust_state.shape[:-1], 3), jnp.float32)
-    u_state = _first_order(gust_state[..., 0], noise[..., 0], tau_u, parameters.sigma_u, dt)
-    v_state, v_gust = _second_order(
+    noise = jax.random.normal(key, (*gust_state.shape[:-1], 3))
+    u_state = first_order_gust(gust_state[..., 0], noise[..., 0], tau_u, parameters.sigma_u, dt)
+    v_state, v_gust = second_order_gust(
         gust_state[..., 1:3], noise[..., 1], tau_v, parameters.sigma_v, dt
     )
-    w_state, w_gust = _second_order(
+    w_state, w_gust = second_order_gust(
         gust_state[..., 3:5], noise[..., 2], tau_w, parameters.sigma_w, dt
     )
     next_state = jnp.concatenate((u_state[..., None], v_state, w_state), axis=-1)
@@ -132,9 +137,9 @@ class WeatherRecords(NamedTuple):
 
     @classmethod
     def from_arrays(cls, wind_speed_m_s, wind_from_deg, gust_m_s=None) -> WeatherRecords:
-        speed = jnp.asarray(np.asarray(wind_speed_m_s, dtype=np.float32))
-        direction = jnp.deg2rad(jnp.asarray(np.asarray(wind_from_deg, dtype=np.float32)))
-        gust = speed if gust_m_s is None else jnp.asarray(np.asarray(gust_m_s, dtype=np.float32))
+        speed = jnp.asarray(np.asarray(wind_speed_m_s, dtype=float))
+        direction = jnp.deg2rad(jnp.asarray(np.asarray(wind_from_deg, dtype=float)))
+        gust = speed if gust_m_s is None else jnp.asarray(np.asarray(gust_m_s, dtype=float))
         return cls(wind_speed_m_s=speed, wind_from_rad=direction, gust_m_s=jnp.maximum(gust, speed))
 
     @classmethod
@@ -170,7 +175,8 @@ def sample_weather(
         wind_speed_m_s=records.wind_speed_m_s[index],
         wind_from_rad=records.wind_from_rad[index],
         turbulence_wind_20ft_m_s=records.gust_m_s[index],
-        roughness_length_m=jnp.asarray(roughness_length_m, jnp.float32),
+        roughness_length_m=jnp.asarray(roughness_length_m),
+        vertical_wind_m_s=jnp.zeros(()),
     )
 
 
@@ -194,7 +200,8 @@ def sample_weather_uniform(
         wind_speed_m_s=speed,
         wind_from_rad=direction,
         turbulence_wind_20ft_m_s=speed * ratio,
-        roughness_length_m=jnp.asarray(roughness_length_m, jnp.float32),
+        roughness_length_m=jnp.asarray(roughness_length_m),
+        vertical_wind_m_s=jnp.zeros(()),
     )
 
 

@@ -14,6 +14,9 @@ from (clockwise from north) at 10 m; the 20 ft wind that sets MIL-F-8785C turbul
 (by default the same speed; from records, the reported gust); the site's roughness length
 (0.03 m open grass, 0.1 m to 0.5 m for scrub and suburbs, 0.001 m over water).
 
+`vertical_wind_m_s` is a mean updraft, positive up and uniform with altitude, for thermals, ridge
+lift, or the vertical component a flight campaign inferred.
+
 `weather_classes()` returns calm, light (7.7 m/s at 20 ft), moderate (15.4), and severe (23.2)
 conditions with a matching mean wind from the north.
 
@@ -31,7 +34,10 @@ Dryden filters of `cascade.env.gusts` one period with the intensities and length
 aircraft's current altitude and airspeed, so turbulence changes as it climbs, descends, and
 slows. The longitudinal gust acts along the heading, the lateral to its right, the vertical
 down. Stationary intensity matches the class (`tests/test_weather.py`); a calm condition gives
-exactly zero gust.
+exactly zero gust. Dryden is a frozen-field model: its time constants are length scales over
+airspeed, and the airspeed is floored at 1 m/s, so in hover the gusts are slow (about 15 s
+longitudinal at 1.5 m) and the model is a stand-in rather than a description of turbulence
+at rest.
 
 ## Records
 

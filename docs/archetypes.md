@@ -29,8 +29,11 @@ Textbook, and stated in the code:
 - Sweep and taper place three panels per wing half along the quarter-chord line; washout sets
   each panel's incidence; reflex is the section zero-lift moment.
 - Static margin places the centre of mass ahead of the neutral point of the panels (tail
-  included, with static downwash `2 CL_alpha / (pi AR)` folded into the tail's effective slope
-  and its cruise downwash into its incidence).
+  included, with its effectiveness reduced by the wing's downwash slope `2 CL_alpha / (pi AR)`).
+  The tail itself keeps its full lift slope and sees the wing's downwash through the spec's
+  `downwash_map`, so pitch damping and elevator power are not reduced along with the static
+  stability (an earlier version folded the downwash into the slope; the nominal design's
+  pitch authority rose 15% when the map replaced it).
 - Tail volume coefficients and tail arm size the tails; a V-tail is two tilted panels carrying
   the horizontal and vertical volumes with a ruddervator mix in the control map.
 - Propwash weights from how much of each panel the disk covers; the propeller's static thrust
@@ -48,7 +51,7 @@ the surfaces at their steady deflection (`control_authority`), so actuator lag d
 it. From the default ranges about 9 in 10 sampled designs of either archetype pass; the rest
 fail at trim or stall margin (flying wings) or at tail authority (conventional).
 
-Sampled families are visibly diverse: across 40 designs per archetype the cruise speed spans
+`scripts/archetype_statistics.py` emits these numbers. Sampled families are visibly diverse: across 40 designs per archetype the cruise speed spans
 8 to 23 m/s, the short-period frequency 1 to 3.8 Hz, and pitch authority 23 to 540 rad/s².
 
 ## Automatic tuning

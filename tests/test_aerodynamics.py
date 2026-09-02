@@ -230,3 +230,49 @@ def test_stalled_flap_load_keeps_the_attached_moment_arm():
     assert jnp.all(moment[0][flapped] < 0.0)
     # An all-moving surface has no flap share and therefore no flap moment.
     assert jnp.allclose(moment[0][~flapped], 0.0, atol=1e-6)
+
+
+def test_downwash_map_reduces_a_downstream_surface_incidence_and_lift():
+    from dataclasses import replace
+
+    from cascade.dynamics import evaluate_dynamics
+    from cascade.reference import aerobatic_reference_spec
+    from cascade.spec import load_aircraft_spec, save_aircraft_spec
+
+    spec = aerobatic_reference_spec()
+    names = [s.name for s in spec.surfaces]
+    tail = names.index("horizontal_tail")
+    count = len(names)
+    table = [[0.0] * count for _ in range(count)]
+    for wing in ("left_wing", "right_wing"):
+        table[tail][names.index(wing)] = 0.15
+    washed = replace(spec, downwash_map=tuple(tuple(r) for r in table))
+    plain, downwashed = spec.to_model(), washed.to_model()
+    environment = standard_environment()
+    state = zero_state(plain, altitude=50.0, forward_speed=12.0)
+    state = state._replace(
+        rigid_body=state.rigid_body._replace(
+            attitude=jnp.array([0.0, jnp.sin(0.05), 0.0, jnp.cos(0.05)])
+        )
+    )
+    control = ControlInput(propeller=jnp.array([0.5]), channel=jnp.zeros(3))
+    before = evaluate_dynamics(plain, state, control, environment).aerodynamics
+    after = evaluate_dynamics(downwashed, state, control, environment).aerodynamics
+    # The tail's effective incidence and lift drop; the wings are untouched.
+    assert float(after.air.angle_of_attack[tail]) < float(before.air.angle_of_attack[tail])
+    assert float(after.force_per_surface[tail, 2]) > float(before.force_per_surface[tail, 2])
+    for wing in ("left_wing", "right_wing"):
+        index = names.index(wing)
+        assert jnp.allclose(after.force_per_surface[index], before.force_per_surface[index])
+    # Less tail download means a less nose-down moment.
+    assert float(after.moment_body[1]) > float(before.moment_body[1])
+    # The table survives the TOML round trip, and its absence means zeros.
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "washed.toml"
+        save_aircraft_spec(washed, path)
+        loaded = load_aircraft_spec(path)
+        assert loaded.downwash_map == washed.downwash_map
+    assert float(jnp.max(jnp.abs(plain.surfaces.downwash_map))) == 0.0

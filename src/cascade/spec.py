@@ -239,6 +239,7 @@ class AircraftSpec:
     surfaces: tuple[SurfaceSpec, ...]
     propellers: tuple[PropellerSpec, ...]
     body: BodySpec | None = None
+    downwash_map: tuple[tuple[float, ...], ...] | None = None
     schema_version: int = SCHEMA_VERSION
 
     def validate(self) -> Self:
@@ -265,6 +266,12 @@ class AircraftSpec:
                     f"propeller {propeller.name!r} has {len(propeller.slipstream_weights)} "
                     f"slipstream weights; expected {len(self.surfaces)}"
                 )
+        if self.downwash_map is not None:
+            rows = self.downwash_map
+            if len(rows) != len(self.surfaces) or any(len(r) != len(self.surfaces) for r in rows):
+                raise SpecError(
+                    f"downwash_map must be {len(self.surfaces)} x {len(self.surfaces)} (surfaces)"
+                )
         if self.body is not None:
             for row in self.body.deflection_map:
                 if len(row) != len(self.surfaces):
@@ -280,7 +287,13 @@ class AircraftSpec:
         surfaces = self.surfaces
         propellers = self.propellers
         n_propeller, n_surface = len(propellers), len(surfaces)
+        downwash = (
+            jnp.zeros((n_surface, n_surface))
+            if self.downwash_map is None
+            else jnp.asarray(self.downwash_map, dtype=float)
+        )
         surface_model = SurfaceModel(
+            downwash_map=downwash,
             position=jnp.asarray([surface.position_m for surface in surfaces]),
             body_from_surface=jnp.asarray([surface.body_from_surface for surface in surfaces]),
             area=jnp.asarray([surface.area_m2 for surface in surfaces]),
@@ -406,6 +419,11 @@ class AircraftSpec:
                     PropellerSpec.from_dict(value) for value in data.get("propellers", [])
                 ),
                 body=BodySpec.from_dict(data["body"]) if "body" in data else None,
+                downwash_map=(
+                    tuple(tuple(float(v) for v in row) for row in data["downwash_map"])
+                    if "downwash_map" in data
+                    else None
+                ),
             )
         except (KeyError, TypeError, ValueError) as error:
             raise SpecError(f"invalid aircraft specification: {error}") from error
@@ -430,6 +448,7 @@ class AircraftSpec:
             "surfaces": [surface.to_dict() for surface in self.surfaces],
             "propellers": [propeller.to_dict() for propeller in self.propellers],
             **({} if self.body is None else {"body": self.body.to_dict()}),
+            **({} if self.downwash_map is None else {"downwash_map": _lists(self.downwash_map)}),
         }
 
 

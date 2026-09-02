@@ -83,6 +83,20 @@ def _second_order(
     return jnp.stack((first_next, second_next), axis=-1), gust
 
 
+def first_order_gust(state: Array, noise: Array, tau: Array, sigma: Array, dt: float) -> Array:
+    """Public name of the longitudinal Dryden stage (see :func:`_first_order`)."""
+
+    return _first_order(state, noise, tau, sigma, dt)
+
+
+def second_order_gust(
+    state: Array, noise: Array, tau: Array, sigma: Array, dt: float
+) -> tuple[Array, Array]:
+    """Public name of the lateral and vertical Dryden stage (see :func:`_second_order`)."""
+
+    return _second_order(state, noise, tau, sigma, dt)
+
+
 def dryden_wind_sequence(
     key: Array,
     steps: int,

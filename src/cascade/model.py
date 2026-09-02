@@ -13,7 +13,8 @@ class SurfaceModel(NamedTuple):
 
     A surface with zero area contributes no force and exists only to carry a physical, lagged,
     limited actuator, for example the elevons of an aircraft modelled by a whole-aircraft
-    coefficient block.
+    coefficient block. ``downwash_map[j, i]`` is the incidence (rad) surface ``j`` loses per unit
+    of surface ``i``'s lift coefficient: static downwash of a tail behind a wing, zero by default.
     """
 
     position: Array
@@ -37,6 +38,7 @@ class SurfaceModel(NamedTuple):
     flap_effectiveness: Array
     moment_coefficient_flap: Array
     drag_coefficient_flap: Array
+    downwash_map: Array
 
 
 class PropellerModel(NamedTuple):
@@ -236,12 +238,15 @@ def validate_model(model: AircraftModel) -> AircraftModel:
     surface_vectors = {
         "position": (n_surface, 3),
         "body_from_surface": (n_surface, 3, 3),
+        "downwash_map": (n_surface, n_surface),
     }
     for name, expected in surface_vectors.items():
         actual = getattr(surfaces, name).shape
         if actual != expected:
             raise ValueError(f"surfaces.{name} must have shape {expected}, got {actual}")
     for name in SurfaceModel._fields[2:]:
+        if name in surface_vectors:
+            continue
         actual = getattr(surfaces, name).shape
         if actual != (n_surface,):
             raise ValueError(f"surfaces.{name} must have shape {(n_surface,)}, got {actual}")
@@ -339,8 +344,17 @@ def validate_model(model: AircraftModel) -> AircraftModel:
     directions = np.asarray(propellers.direction)
     if not np.allclose(np.linalg.norm(directions, axis=-1), 1.0, atol=1e-5):
         raise ValueError("propeller directions must be unit vectors")
-    if not np.allclose(np.asarray(model.inertia) @ np.asarray(model.inertia_inverse), identity):
+    # The inverse is formed in the working precision (float32 by default): a product within
+    # 1e-5 of the identity is as exact as that allows for tensors of order 1 kg m^2.
+    product = np.asarray(model.inertia) @ np.asarray(model.inertia_inverse)
+    if not np.allclose(product, identity, atol=1e-5):
         raise ValueError("inertia_inverse does not invert inertia")
+    principal = np.linalg.eigvalsh(np.asarray(model.inertia, dtype=float))
+    if np.any(principal <= 0.0) or principal[0] + principal[1] < principal[2] * (1.0 - 1e-6):
+        raise ValueError(
+            "inertia must be positive definite with principal moments obeying the triangle "
+            "inequality (no physical mass distribution has one moment above the sum of the others)"
+        )
     inertia = np.asarray(model.inertia)
     if not np.allclose(inertia, inertia.T, atol=1e-7):
         raise ValueError("inertia must be symmetric")

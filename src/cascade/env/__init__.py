@@ -3,19 +3,29 @@ policies, families of airframes, and weather. See ``docs/environments.md``."""
 
 from cascade.env.baselines import cascade_policy, transition_policy
 from cascade.env.episode import (
+    OBSERVATION_FIXED_SIZE,
     EnvState,
     EpisodeConfig,
+    ObservationLayout,
     action_size,
     action_to_control,
     control_to_action,
     current_environment,
     observation,
+    observation_layout,
+    observation_size,
     reset,
     rollout_actions,
     rollout_policy,
     step,
 )
 from cascade.env.family import Family, family_member, sample_family, stack_pytrees
+from cascade.env.gusts import (
+    DrydenParameters,
+    dryden_environment_sequence,
+    dryden_low_altitude,
+    dryden_wind_sequence,
+)
 from cascade.env.sensors import SensorNoise, sensor_noise
 from cascade.env.tasks import (
     HoverTask,
@@ -42,9 +52,12 @@ from cascade.env.weather import (
 )
 
 __all__ = [
+    "DrydenParameters",
     "EnvState",
     "EpisodeConfig",
     "Family",
+    "OBSERVATION_FIXED_SIZE",
+    "ObservationLayout",
     "HoverTask",
     "Reference",
     "ReferenceFlight",
@@ -59,11 +72,16 @@ __all__ = [
     "cascade_policy",
     "control_to_action",
     "current_environment",
+    "dryden_environment_sequence",
+    "dryden_low_altitude",
+    "dryden_wind_sequence",
     "family_member",
     "hover_reference",
     "hover_task",
     "mean_wind_ned",
     "observation",
+    "observation_layout",
+    "observation_size",
     "reference_speed",
     "reset",
     "rollout_actions",

@@ -66,3 +66,10 @@ def test_records_round_trip_csv_and_sample(tmp_path):
     assert float(condition.turbulence_wind_20ft_m_s) >= float(condition.wind_speed_m_s)
     synthetic = sample_weather_uniform(jax.random.PRNGKey(2))
     assert 0.0 <= float(synthetic.wind_speed_m_s) <= 12.0
+
+
+def test_vertical_wind_is_an_updraft_in_ned():
+    lifted = weather_condition(3.0, 0.0, vertical_wind_m_s=1.5)
+    wind = mean_wind_ned(lifted, 10.0)
+    assert float(wind[2]) == -1.5  # NED down is negative for an updraft
+    assert float(mean_wind_ned(weather_condition(3.0, 0.0), 10.0)[2]) == 0.0
