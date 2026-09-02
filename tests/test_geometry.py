@@ -55,9 +55,15 @@ def test_obj_and_mjcf_are_written(tmp_path):
 
 
 def _gl_available() -> bool:
-    """MuJoCo aborts the process (no exception) when it cannot create an OpenGL context, so
-    rendering is attempted only where a context is known to exist."""
+    """MuJoCo aborts the process (no exception) when it cannot create an OpenGL context, so a
+    frame is rendered only where a context is known to exist: on request
+    (``CASCADE_RENDER_TESTS=1``), with an explicit ``MUJOCO_GL`` backend or a ``DISPLAY`` on
+    Linux, or on a macOS session outside CI (GitHub's macOS runners have no window server)."""
 
+    if os.environ.get("CASCADE_RENDER_TESTS") == "1":
+        return True
+    if os.environ.get("CI"):
+        return False
     if sys.platform == "darwin":
         return True
     if os.environ.get("MUJOCO_GL") in {"egl", "osmesa"}:
