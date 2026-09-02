@@ -34,7 +34,8 @@ guidance cascade, channel-map sign conventions, tuning, and differentiable-tunin
 [environments](docs/environments.md) covers the native-JAX episode functions for learning and
 trajectory optimisation; [archetypes](docs/archetypes.md) covers parametric airframe families
 and automatic controller tuning; [weather](docs/weather.md) covers wind profiles, turbulence
-classes, and station records.
+classes, and station records; [rendering](docs/rendering.md) covers geometry from the spec,
+MJCF export, and MuJoCo video ([tailsitter round trip](docs/media/tailsitter_round_trip_follow.mp4)).
 
 ## Install
 

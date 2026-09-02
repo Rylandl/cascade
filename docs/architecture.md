@@ -231,6 +231,9 @@ rendering and hardware adapters         boundary coordinate conversion
 - Done: `cascade.control` — a rate-scheduled rate/attitude/guidance cascade (PX4-style),
   differentiable and batchable, with a closed-loop rollout and tuned default controllers for both
   packaged aircraft. See `docs/control.md`.
+- Done: `cascade.geometry` and `cascade.render` — visual geometry, OBJ and MJCF export, and MuJoCo
+  video playback of any trajectory with flaps, propellers, and stall colouring. See
+  `docs/rendering.md`.
 - Domain randomization, gust models, and observation/sensor models.
 - Done: `cascade.weather` — mean wind with a log profile, MIL-F-8785C classes, per-step Dryden
   gusts at the aircraft's altitude, and station-record sampling, wired into `cascade.env`.

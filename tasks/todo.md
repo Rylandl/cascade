@@ -163,3 +163,11 @@ weather; Glassbox the adaptation and the metric.
 - [ ] 7e next: the Glassbox side (adaptation protocol across a family, the flight-minutes-to-
       baseline metric); discrete 1-cos gusts and ISA density; a learned policy across a family
       (imitation of the per-design baselines, then fine-tuning)
+
+## Phase 8: visualisation (2026-09-02)
+- [x] 8a `cascade.geometry`: parts from the spec (boxes, hinged flaps, spinning props, pod, fallback
+      wing for coefficient aircraft), OBJ and MJCF writers
+- [x] 8b `cascade.render`: MuJoCo kinematic playback to MP4 via ffmpeg, chase/side/ground cameras,
+      stall colouring; `viz` extra; `examples/render_flight.py`
+- [ ] 8c browser viewer (three.js artifact) and a matplotlib fallback for machines without GL;
+      wind/gust arrows and propwash in the scene; a README video

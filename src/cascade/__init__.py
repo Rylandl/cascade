@@ -60,6 +60,7 @@ from cascade.env import (
     trimmed_reference,
 )
 from cascade.family import Family, family_member, sample_family
+from cascade.geometry import aircraft_parts, mjcf_string, write_mjcf, write_obj
 from cascade.gusts import (
     DrydenParameters,
     dryden_environment_sequence,
@@ -154,6 +155,8 @@ __all__ = [
     "sample_designs",
     "sample_family",
     "validate_design",
+    "write_mjcf",
+    "write_obj",
     "EnvState",
     "EpisodeConfig",
     "Family",
@@ -226,6 +229,7 @@ __all__ = [
     "TransitionState",
     "TrimResult",
     "aerobatic_reference",
+    "aircraft_parts",
     "aerobatic_reference_controller",
     "aerobatic_reference_spec",
     "aerodynamic_sweep",
@@ -254,6 +258,7 @@ __all__ = [
     "initial_transition_state",
     "linearize_step",
     "load_aircraft_spec",
+    "mjcf_string",
     "rate_controller",
     "repeat_control",
     "rk4_step",

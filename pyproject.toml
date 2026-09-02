@@ -25,8 +25,11 @@ classifiers = [
 [project.urls]
 Repository = "https://github.com/Rylandl/cascade"
 
+[project.optional-dependencies]
+viz = ["mujoco>=3.1"]
+
 [dependency-groups]
-dev = ["pytest>=8.0", "ruff>=0.9"]
+dev = ["pytest>=8.0", "ruff>=0.9", "mujoco>=3.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cascade"]
