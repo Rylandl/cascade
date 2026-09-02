@@ -74,6 +74,9 @@ class TrimResult:
         return float(jnp.linalg.norm(self.residual[3:]))
 
 
+_SYMMETRY_WEIGHT = 1e-3
+
+
 def trim_straight_flight(
     model: AircraftModel,
     condition: StraightFlightCondition,
@@ -110,17 +113,26 @@ def trim_straight_flight(
         ]
     )
 
+    # Straight flight of a symmetric aircraft admits a one-parameter family of slipping trims
+    # (sideslip balanced by bank and aileron). A tiny pull on roll and yaw offset selects the
+    # symmetric member deterministically, and is far too weak to prevent a genuine sideslip
+    # need from being met. It is not part of the reported residual or the success test.
+    symmetry_rows = np.zeros((2, initial.shape[0]))
+    symmetry_rows[0, 0] = _SYMMETRY_WEIGHT
+    symmetry_rows[1, 2] = _SYMMETRY_WEIGHT
+
     def scipy_residual(decision: np.ndarray) -> np.ndarray:
         value = _compiled_scaled_balance(
             model, condition_vector, environment, jnp.asarray(decision)
         )
-        return np.asarray(jax.device_get(value), dtype=float)
+        balance = np.asarray(jax.device_get(value), dtype=float)
+        return np.concatenate((balance, symmetry_rows @ decision))
 
     def scipy_jacobian(decision: np.ndarray) -> np.ndarray:
         value = _compiled_balance_jacobian(
             model, condition_vector, environment, jnp.asarray(decision)
         )
-        return np.asarray(jax.device_get(value), dtype=float)
+        return np.concatenate((np.asarray(jax.device_get(value), dtype=float), symmetry_rows))
 
     optimizer = least_squares(
         scipy_residual,

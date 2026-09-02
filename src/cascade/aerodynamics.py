@@ -185,8 +185,9 @@ def aerodynamic_coefficients(
 
     ``deflection`` is the physical surface angle. Its flap share shifts both the attached lift
     curve and the separated flat-plate incidence by ``flap_effectiveness`` times the angle, and
-    adds intrinsic pitching-moment and profile-drag increments to attached flow only. The
-    all-moving share has already rotated the frame and therefore ``angle_of_attack``.
+    adds an intrinsic pitching-moment increment in both regimes and a profile-drag increment
+    in attached flow. The all-moving share has already rotated the frame and therefore
+    ``angle_of_attack``.
     """
 
     surfaces = model.surfaces
@@ -220,7 +221,20 @@ def aerodynamic_coefficients(
         surfaces.normal_force_coefficient * absolute_sine**3
         + surfaces.edge_drag_coefficient * jnp.square(cosine)
     )
-    moment_separated = jnp.zeros_like(moment_attached)
+    # The flap's extra normal force acts on the flap, aft of the quarter chord. The attached
+    # flap moment and lift increment fix that arm, -Cm_flap / (CL_alpha tau) chords, and the
+    # separated load keeps it, so a stalled elevon still pitches the surface. Without this the
+    # post-stall pitch authority of a flying wing is only the panel's own lever arm about the
+    # centre of mass, and a tailsitter cannot pitch up out of forward flight.
+    flap_lift_slope = surfaces.lift_curve_slope * surfaces.flap_effectiveness
+    flap_arm = jnp.where(
+        flap_lift_slope > 0.0,
+        -surfaces.moment_coefficient_flap / jnp.where(flap_lift_slope > 0.0, flap_lift_slope, 1.0),
+        0.0,
+    )
+    clean_sine = jnp.sin(angle_of_attack)
+    normal_clean = surfaces.normal_force_coefficient * clean_sine * smooth_abs(clean_sine)
+    moment_separated = -flap_arm * (normal - normal_clean)
 
     separation_state = jnp.clip(aero_state.separation, 0.0, 1.0)
     forced_separation = sigmoid(

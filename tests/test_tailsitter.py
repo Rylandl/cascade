@@ -16,9 +16,7 @@ def hover_state(model, throttle, aileron=0.0, elevator=0.0):
 
     state = zero_state(model, altitude=1.5)
     state = state._replace(
-        rigid_body=state.rigid_body._replace(
-            attitude=quaternion_from_euler(0.0, jnp.pi / 2.0, 0.0)
-        )
+        rigid_body=state.rigid_body._replace(attitude=quaternion_from_euler(0.0, jnp.pi / 2.0, 0.0))
     )
     control = ControlInput(
         propeller=jnp.array([throttle, throttle]), channel=jnp.array([aileron, elevator])
@@ -129,7 +127,7 @@ def test_full_envelope_is_finite_and_cruise_trims_below_stall():
 
 def test_transition_corridor_has_a_continuous_thrust_borne_branch():
     model = tailsitter_reference()
-    speeds = (0.5, 1.0, 2.0, 3.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0)
+    speeds = (0.5, 1.0, 2.0, 3.0, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5, 7.0, 8.0)
     seed = jnp.array([0.0, np.deg2rad(70.0), 0.0, 0.77, 0.77, 0.0, 0.0])
 
     thrust_borne = cascade_continue(model, speeds, seed)
@@ -138,9 +136,15 @@ def test_transition_corridor_has_a_continuous_thrust_borne_branch():
     assert all(result.success for result in thrust_borne)
     assert all(result.success for result in conventional)
     pitches = [float(result.decision[1]) for result in thrust_borne]
-    assert all(np.deg2rad(35.0) < pitch < np.deg2rad(75.0) for pitch in pitches)
+    assert all(np.deg2rad(15.0) < pitch < np.deg2rad(75.0) for pitch in pitches)
+    # A pure pitch branch: no roll or sideslip is needed to balance it at any speed.
+    assert all(abs(float(result.decision[0])) < np.deg2rad(1.0) for result in thrust_borne)
+    assert all(abs(float(result.decision[2])) < np.deg2rad(1.0) for result in thrust_borne)
+    # Pitch eases toward cruise; elevon demand peaks in the pinch and never nears the stop.
+    assert all(later < earlier for earlier, later in zip(pitches[3:], pitches[4:], strict=False))
+    assert max(abs(float(result.control.channel[1])) for result in thrust_borne) < 0.5
     # The two branches coexist at cruise with very different incidence.
-    cruise_thrust_borne = thrust_borne[-1]  # 7 m/s
+    cruise_thrust_borne = thrust_borne[-2]  # 7 m/s
     cruise_conventional = conventional[-1]
     assert cruise_thrust_borne.angle_of_attack_rad > np.deg2rad(25.0)
     assert cruise_conventional.angle_of_attack_rad < np.deg2rad(10.0)

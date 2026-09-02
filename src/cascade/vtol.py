@@ -39,7 +39,13 @@ class HoverGains(NamedTuple):
     """Position, velocity, and integral gains and the limits that keep hover commands sane.
 
     The integral term removes the standing offset a constant force leaves behind, such as the
-    camber lift of a wing sitting in its own propwash.
+    camber lift of a wing sitting in its own propwash. ``wing_speed_m_s`` is the airspeed at
+    which the wing is credited with carrying the whole weight: the thrust law subtracts
+    ``(airspeed / wing_speed)^2`` of gravity before balancing, so a tilted, fast aircraft is not
+    driven forward by thrust the wing already supplies. Infinity disables the credit.
+    ``position_error_limit_m`` clips the position error seen by the proportional and integral
+    terms, so far from the setpoint the loop tracks the commanded velocity rather than lunging
+    at a stale position (a schedule the aircraft fell behind during forward flight, say).
     """
 
     position_kp: Array
@@ -48,6 +54,8 @@ class HoverGains(NamedTuple):
     integral_limit: Array
     acceleration_limit: Array
     tilt_limit: Array
+    wing_speed_m_s: Array
+    position_error_limit_m: Array
 
 
 class HoverState(NamedTuple):
@@ -76,6 +84,8 @@ def default_hover_gains() -> HoverGains:
         integral_limit=jnp.asarray(2.0),
         acceleration_limit=jnp.asarray(5.0),
         tilt_limit=jnp.asarray(0.5),
+        wing_speed_m_s=jnp.asarray(jnp.inf),
+        position_error_limit_m=jnp.asarray(1.0),
     )
 
 
@@ -96,9 +106,7 @@ def thrust_direction_attitude(direction_world: Array, azimuth_rad: Array) -> Arr
     reference = jnp.stack(
         (jnp.cos(azimuth_rad), jnp.sin(azimuth_rad), jnp.zeros_like(azimuth_rad)), axis=-1
     )
-    z_body = normalize(
-        reference - jnp.sum(reference * x_body, axis=-1, keepdims=True) * x_body
-    )
+    z_body = normalize(reference - jnp.sum(reference * x_body, axis=-1, keepdims=True) * x_body)
     y_body = jnp.cross(z_body, x_body, axis=-1)
     rotation = jnp.stack((x_body, y_body, z_body), axis=-1)
     return quaternion_from_matrix(rotation)
@@ -138,7 +146,11 @@ def hover_guidance(
     """
 
     rigid_body = state.rigid_body
-    position_error = setpoint.position_ned - rigid_body.position
+    position_error = jnp.clip(
+        setpoint.position_ned - rigid_body.position,
+        -gains.position_error_limit_m,
+        gains.position_error_limit_m,
+    )
     position_integral = jnp.clip(
         hover_state.position_integral + position_error * dt,
         -gains.integral_limit,
@@ -178,7 +190,11 @@ def hover_guidance(
     # Thrust from vertical balance: the up component of the tilted thrust must supply the up
     # component of the required specific force. Capped where the axis nears horizontal.
     cosine = jnp.maximum(jnp.sum(direction * up, axis=-1), jnp.cos(1.4))
-    thrust_total = model.mass * jnp.sum(specific_force * up, axis=-1) / cosine
+    airspeed = safe_norm(rigid_body.velocity - environment.wind)
+    lift_fraction = jnp.minimum(jnp.square(airspeed / gains.wing_speed_m_s), 1.0)
+    gravity = safe_norm(environment.gravity)
+    vertical_demand = jnp.sum(specific_force * up, axis=-1) - gravity * lift_fraction
+    thrust_total = model.mass * jnp.maximum(vertical_demand, 0.05 * gravity) / cosine
     throttle = hover_throttle(model, thrust_total, environment.density)
     return attitude, throttle, HoverState(position_integral=position_integral)
 
@@ -226,6 +242,71 @@ def velocity_ramp_schedule(
     )
 
 
+def trapezoid_speed_profile(
+    steps: int,
+    dt: float,
+    *,
+    hold_steps: int,
+    cruise_speed_m_s: Array,
+    acceleration_m_s2: Array,
+    cruise_steps: int,
+    deceleration_m_s2: Array,
+) -> Array:
+    """Commanded speed over time: hold, accelerate, cruise, decelerate, hold.
+
+    The cruise phase lasts ``cruise_steps`` after the acceleration ramp reaches cruise speed;
+    the deceleration ramp then runs back to zero and the schedule holds there.
+    """
+
+    time = jnp.arange(steps) * dt
+    ramp_start = hold_steps * dt
+    cruise_start = ramp_start + cruise_speed_m_s / acceleration_m_s2
+    decel_start = cruise_start + cruise_steps * dt
+    decel_end = decel_start + cruise_speed_m_s / deceleration_m_s2
+    speed = jnp.where(
+        time < cruise_start,
+        acceleration_m_s2 * jnp.maximum(time - ramp_start, 0.0),
+        jnp.where(
+            time < decel_start,
+            cruise_speed_m_s,
+            cruise_speed_m_s
+            - deceleration_m_s2 * jnp.minimum(time - decel_start, decel_end - decel_start),
+        ),
+    )
+    return jnp.clip(speed, 0.0, cruise_speed_m_s)
+
+
+def speed_profile_schedule(
+    speed_m_s: Array,
+    dt: float,
+    *,
+    start_position_ned: Array,
+    heading_rad: Array,
+    cruise_speed_m_s: Array,
+    tilt_at_cruise_rad: float = 1.0,
+) -> HoverSetpoint:
+    """Time-major hover setpoints that follow a commanded speed profile along a heading.
+
+    Position is the running integral of the profile from the start point, the belly faces the
+    heading, and the scheduled forward tilt is proportional to the commanded speed up to
+    ``tilt_at_cruise_rad``. Decelerating the profile through the transition controller's switch
+    airspeed hands the aircraft back to hover guidance, so a trapezoid profile flies a full
+    hover, cruise, hover round trip.
+    """
+
+    distance = jnp.cumsum(speed_m_s) * dt
+    along = jnp.stack(
+        (jnp.cos(heading_rad), jnp.sin(heading_rad), jnp.zeros_like(heading_rad)), axis=-1
+    )
+    steps = speed_m_s.shape[0]
+    return HoverSetpoint(
+        position_ned=start_position_ned + distance[:, None] * along,
+        velocity_ned=speed_m_s[:, None] * along,
+        azimuth_rad=jnp.broadcast_to(heading_rad, (steps,)),
+        tilt_forward_rad=tilt_at_cruise_rad * speed_m_s / cruise_speed_m_s,
+    )
+
+
 class TransitionController(NamedTuple):
     """Hover and forward-flight guidance sharing one attitude and rate stack.
 
@@ -259,13 +340,27 @@ def initial_transition_state(aircraft_state: AircraftState) -> TransitionState:
     )
 
 
-def forward_weight(controller: TransitionController, aircraft_state, environment) -> Array:
-    """Blend weight of the forward-flight law, a sigmoid in airspeed."""
+def forward_weight(
+    controller: TransitionController, hover_setpoint: HoverSetpoint, aircraft_state, environment
+) -> Array:
+    """Blend weight of the forward-flight law.
+
+    The product of two sigmoids about the switch airspeed: one in the measured airspeed, so the
+    forward law never flies a wing that is not yet flying, and one in the commanded hover speed,
+    so the schedule owns the mode. Decelerating the commanded speed through the switch hands the
+    aircraft back to hover guidance while it is still fast, which is the back-transition: a
+    pitch-up onto the thrust-borne branch, then a decelerating hover ramp.
+    """
 
     airspeed = safe_norm(aircraft_state.rigid_body.velocity - environment.wind)
-    return jax.nn.sigmoid(
+    commanded = safe_norm(hover_setpoint.velocity_ned)
+    measured_gate = jax.nn.sigmoid(
         (airspeed - controller.switch_airspeed_m_s) / controller.switch_width_m_s
     )
+    commanded_gate = jax.nn.sigmoid(
+        (commanded - controller.switch_airspeed_m_s) / controller.switch_width_m_s
+    )
+    return measured_gate * commanded_gate
 
 
 def transition_step(
@@ -280,15 +375,24 @@ def transition_step(
 ) -> tuple[ControlInput, TransitionState, Array]:
     """One control step: blended guidance, attitude loop, rate loop, channel mapping."""
 
-    weight = forward_weight(controller, aircraft_state, environment)
+    weight = forward_weight(controller, hover_setpoint, aircraft_state, environment)
     # Each guidance law's integrator advances in proportion to its blend weight, so neither can
     # wind up while the other is flying the aircraft.
     hover_attitude, hover_throttle_command, hover_state = hover_guidance(
-        model, controller.hover, state.hover, hover_setpoint, aircraft_state, environment,
+        model,
+        controller.hover,
+        state.hover,
+        hover_setpoint,
+        aircraft_state,
+        environment,
         (1.0 - weight) * dt,
     )
     forward_attitude, forward_throttle, forward_state = guidance_controller(
-        controller.forward, state.forward, forward_setpoint, aircraft_state, environment,
+        controller.forward,
+        state.forward,
+        forward_setpoint,
+        aircraft_state,
+        environment,
         weight * dt,
     )
     measured = aircraft_state.rigid_body.attitude
@@ -334,8 +438,14 @@ def transition_rollout(
         aircraft, controller_state = carry
         hover_setpoint, forward_setpoint = setpoints
         control, next_controller_state, weight = transition_step(
-            model, controller, controller_state, hover_setpoint, forward_setpoint, aircraft,
-            environment, dt,
+            model,
+            controller,
+            controller_state,
+            hover_setpoint,
+            forward_setpoint,
+            aircraft,
+            environment,
+            dt,
         )
         next_aircraft = step(model, aircraft, control, environment, dt)
         return (next_aircraft, next_controller_state), (next_aircraft, control, weight)
@@ -363,7 +473,7 @@ def tailsitter_reference_controller(spec: AircraftSpec) -> TransitionController:
         attitude=AttitudeGains(
             kp=jnp.array([4.0, 4.0, 2.0]), rate_limit=jnp.array([4.0, 4.0, 2.0])
         ),
-        hover=default_hover_gains(),
+        hover=default_hover_gains()._replace(wing_speed_m_s=jnp.asarray(9.0)),
         forward=GuidanceGains(
             airspeed_kp=jnp.asarray(0.1),
             airspeed_ki=jnp.asarray(0.05),

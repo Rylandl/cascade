@@ -55,7 +55,7 @@ logs carry generalized surface angles. Physical limits apply to the mapped angle
 | `separation_time_constant_s`, `reattachment_time_constant_s` | s | separation lag |
 | `all_moving_fraction` | 1 | `0` for a flap, `1` for a surface that rotates as a whole |
 | `flap_effectiveness` | 1 | `d alpha_eff / d delta` for the flap share, typically 0.4–0.6 |
-| `moment_coefficient_flap_rad` | 1/rad | intrinsic pitching-moment increment per flap radian |
+| `moment_coefficient_flap_rad` | 1/rad | intrinsic pitching-moment increment per flap radian in attached flow; with the lift increment it also fixes where the flap load acts, and the separated flap load keeps that arm |
 | `drag_coefficient_flap_rad2` | 1/rad² | profile-drag increment per flap radian squared |
 | `control_map_rad` | rad per channel unit | one entry per control channel |
 | `actuator_bias_rad`, `actuator_limit_rad` | rad | neutral angle and symmetric physical limit |

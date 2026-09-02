@@ -92,9 +92,11 @@ from cascade.vtol import (
     hover_guidance,
     initial_hover_state,
     initial_transition_state,
+    speed_profile_schedule,
     tailsitter_reference_controller,
     transition_rollout,
     transition_step,
+    trapezoid_speed_profile,
     velocity_ramp_schedule,
 )
 
@@ -186,6 +188,8 @@ __all__ = [
     "transition_step",
     "trim_straight_flight",
     "validate_model",
+    "speed_profile_schedule",
+    "trapezoid_speed_profile",
     "velocity_ramp_schedule",
     "zero_control",
     "zero_state",

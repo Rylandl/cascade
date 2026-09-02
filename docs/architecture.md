@@ -92,8 +92,12 @@ alpha_sep = alpha + tau delta_flap                  flat-plate incidence
 The attached model is a conventional lift-slope, profile-drag, induced-drag, and pitching-moment
 model. The separated model approaches flat-plate behavior at the flapped incidence and remains
 defined for the entire `atan2` angle range, so a stalled aileron or elevator keeps the reduced
-authority that post-stall and prop-hanging flight rely on. A continuous separation fraction
-blends the two:
+authority that post-stall and prop-hanging flight rely on. The flap's extra normal force acts on
+the flap, aft of the quarter chord, in both regimes: the attached flap moment and lift increment
+fix that arm at `-Cm_flap / (CLa tau)` chords, and the separated flap load keeps it,
+`Cm_sep = -arm (CN(alpha_sep) - CN(alpha))`. Without it a stalled flying wing has only its
+panels' lever arms about the centre of mass for pitch authority and a tailsitter cannot pitch
+up out of forward flight. A continuous separation fraction blends the two:
 
 ```text
 C = (1 - separation) C_attached + separation C_separated

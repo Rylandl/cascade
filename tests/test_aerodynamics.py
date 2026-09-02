@@ -204,3 +204,29 @@ def test_propulsion_gradients_are_finite_at_zero_speed_and_zero_airspeed():
 
     gradients = jax.grad(total, argnums=(0, 1))(jnp.zeros(1), jnp.zeros(3))
     assert all(jnp.all(jnp.isfinite(gradient)) for gradient in gradients)
+
+
+def test_stalled_flap_load_keeps_the_attached_moment_arm():
+    model = aerobatic_reference()
+    surfaces = model.surfaces
+    alpha = jnp.full((1, model.n_surfaces), jnp.pi / 4.0)
+    aero_state = AeroState(separation=jnp.ones((1, model.n_surfaces)))
+    deflection = jnp.full_like(alpha, 0.3)
+
+    _, _, moment = aerodynamic_coefficients(model, aero_state, alpha, deflection)
+
+    flap_share = (1.0 - surfaces.all_moving_fraction) * 0.3
+    shifted = alpha + surfaces.flap_effectiveness * flap_share
+
+    def normal(a):
+        return surfaces.normal_force_coefficient * jnp.sin(a) * jnp.abs(jnp.sin(a))
+
+    flap_lift_slope = surfaces.lift_curve_slope * surfaces.flap_effectiveness
+    arm = -surfaces.moment_coefficient_flap / flap_lift_slope
+    expected = -jnp.nan_to_num(arm) * (normal(shifted) - normal(alpha))
+    assert jnp.allclose(moment, expected, atol=1e-6)
+    # Trailing-edge-down on a flapped wing: more normal force on the flap, nose-down moment.
+    flapped = (surfaces.all_moving_fraction < 1.0) & (surfaces.flap_effectiveness > 0.0)
+    assert jnp.all(moment[0][flapped] < 0.0)
+    # An all-moving surface has no flap share and therefore no flap moment.
+    assert jnp.allclose(moment[0][~flapped], 0.0, atol=1e-6)

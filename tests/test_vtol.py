@@ -80,7 +80,8 @@ def test_hover_guidance_tilts_toward_a_position_error_within_the_limit():
     )
 
     x_body = quaternion_rotate(attitude, jnp.array([1.0, 0.0, 0.0]))
-    assert x_body[0] > 0.3
+    # The position error is clipped to a metre, so the tilt is that of a 2 m/s^2 demand.
+    assert x_body[0] > 0.15
     tilt = float(jnp.arccos(-x_body[2]))
     assert tilt <= float(gains.tilt_limit) + 1e-4
     assert float(throttle[0]) > 0.78

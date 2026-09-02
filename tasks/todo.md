@@ -78,6 +78,15 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       (`examples/tailsitter_transition.py`, `tests/test_transition.py`: 2 s hover hold, 3.5 m/s^2
       tilt ramp reaches 7 m/s at t = 4 s, cruise at 7.1 m/s with pitch ~9 deg, altitude excursion
       < 1.6 m, finite gradient of final speed in the ramp acceleration)
-- [ ] 6d cruise -> hover back-transition (reverse the ramp; the thrust-borne branch is continuous
-      so the same scheduled tilt should work in reverse) and a hover-hold integrator gain pass
-      (the hold still drifts 0.15 m against the propwash camber lift before the integral catches it)
+- [x] 6d cruise -> hover back-transition: `trapezoid_speed_profile` + `speed_profile_schedule`
+      fly hover -> 8 m/s -> hover (examples/tailsitter_transition.py, tests/test_transition.py).
+      Needed: (1) blend weight gated on commanded as well as measured speed so the schedule owns
+      the mode; (2) hover thrust law credits wing lift (`wing_speed_m_s`) and clips the position
+      error (`position_error_limit_m`); (3) a model fix: the separated-flow flap load now keeps
+      the attached flap moment arm, without which full elevon could not hold alpha > 30 deg at
+      7 m/s and the corridor above 3 m/s was a rolled/sideslipping trim family; (4) trim now pulls
+      roll and yaw offset toward zero (1e-3) so the symmetric member of the slip family is chosen
+      on every platform (this was the ubuntu-only CI failure)
+- [ ] 6e hover-hold integrator gain pass (the hold still drifts 0.15 m against the propwash camber
+      lift before the integral catches it), then a heading change during cruise and a gusty
+      round trip with `cascade.gusts`
