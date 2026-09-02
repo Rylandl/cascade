@@ -214,6 +214,9 @@ rendering and hardware adapters         boundary coordinate conversion
 
 - Direct-actuator Gymnasium and native-JAX environments.
 - Rate, attitude, airspeed, altitude, and path controllers.
+- Done: `cascade.control` — a rate-scheduled rate/attitude/guidance cascade (PX4-style),
+  differentiable and batchable, with a closed-loop rollout and tuned default controllers for both
+  packaged aircraft. See `docs/control.md`.
 - Domain randomization, gust models, and observation/sensor models.
 - MPC and trajectory-optimization examples through stall and transition.
 

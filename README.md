@@ -29,7 +29,8 @@ the same pure functional core.
 See [the architecture document](docs/architecture.md) for scope, equations, extension points, and
 the roadmap. The [analysis guide](docs/analysis.md) covers trim, post-stall branch continuation,
 coefficient sweeps, and local linearization; [aircraft specifications](docs/aircraft-spec.md)
-documents the versioned TOML format.
+documents the versioned TOML format; [the control guide](docs/control.md) covers the rate/attitude/
+guidance cascade, channel-map sign conventions, tuning, and differentiable-tuning examples.
 
 ## Install
 
@@ -73,6 +74,10 @@ controls = cascade.repeat_control(control, steps=100)
 
 final_state, trajectory = jax.jit(cascade.rollout)(model, state, controls, environment, 0.01)
 ```
+
+`cascade.tailsitter_reference()` is an indoor-class flying-wing tailsitter fixture whose propwash
+gives its elevons authority at zero airspeed; `cascade.vtol` adds hover guidance and a
+hover-to-cruise transition controller over the same loops (`docs/tailsitter.md`).
 
 `cascade.gusts` generates Dryden turbulence as a time-major environment sequence for
 `rollout`, with per-world realizations from a PRNG key.
