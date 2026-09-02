@@ -38,6 +38,7 @@ class SurfaceModel(NamedTuple):
     flap_effectiveness: Array
     moment_coefficient_flap: Array
     drag_coefficient_flap: Array
+    separated_center_of_pressure: Array
     downwash_map: Array
 
 

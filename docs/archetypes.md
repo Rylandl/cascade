@@ -39,6 +39,9 @@ Textbook, and stated in the code:
 - Propwash weights from how much of each panel the disk covers; the propeller's static thrust
   from thrust-to-weight and its pitch from cruise (zero-thrust airspeed at full speed is 1.6
   times cruise).
+- Every panel's separated load acts a quarter chord aft of its reference point (the flat-plate
+  centre-of-pressure march), so an archetype has a stall pitch break; the packaged fixtures
+  leave that at zero.
 - Inertia from thin-plate panels, tails, motors, and a central pod, with a mass split.
 
 ## Validation
@@ -52,7 +55,7 @@ it. From the default ranges about 9 in 10 sampled designs of either archetype pa
 fail at trim or stall margin (flying wings) or at tail authority (conventional).
 
 `scripts/archetype_statistics.py` emits these numbers. Sampled families are visibly diverse: across 40 designs per archetype the cruise speed spans
-8 to 23 m/s, the short-period frequency 1 to 3.8 Hz, and pitch authority 23 to 540 rad/s².
+8 to 23 m/s, the short-period frequency 0.9 to 3.4 Hz, and pitch authority 23 to 540 rad/s².
 
 ## Automatic tuning
 

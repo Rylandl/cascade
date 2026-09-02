@@ -276,3 +276,29 @@ def test_downwash_map_reduces_a_downstream_surface_incidence_and_lift():
         loaded = load_aircraft_spec(path)
         assert loaded.downwash_map == washed.downwash_map
     assert float(jnp.max(jnp.abs(plain.surfaces.downwash_map))) == 0.0
+
+
+def test_separated_centre_of_pressure_gives_a_stall_pitch_break():
+    from dataclasses import replace
+
+    from cascade.reference import aerobatic_reference_spec
+
+    spec = aerobatic_reference_spec()
+    shifted = replace(
+        spec, surfaces=tuple(replace(s, separated_center_of_pressure=0.25) for s in spec.surfaces)
+    )
+    plain, broken = spec.to_model(), shifted.to_model()
+    alpha = jnp.full((1, plain.n_surfaces), jnp.pi / 4.0)
+    separated = AeroState(separation=jnp.ones((1, plain.n_surfaces)))
+    zero = jnp.zeros_like(alpha)
+    _, _, moment_plain = aerodynamic_coefficients(plain, separated, alpha, zero)
+    _, _, moment_broken = aerodynamic_coefficients(broken, separated, alpha, zero)
+    normal = broken.surfaces.normal_force_coefficient * jnp.sin(alpha) * jnp.abs(jnp.sin(alpha))
+    assert jnp.allclose(moment_plain, 0.0)
+    assert jnp.allclose(moment_broken, -0.25 * normal, atol=1e-6)
+    # Attached flow is untouched.
+    attached = AeroState(separation=jnp.zeros((1, plain.n_surfaces)))
+    small = jnp.full_like(alpha, 0.05)
+    _, _, a = aerodynamic_coefficients(plain, attached, small, zero)
+    _, _, b = aerodynamic_coefficients(broken, attached, small, zero)
+    assert jnp.allclose(a, b, atol=1e-6)  # the forced-separation sigmoid leaves ~1e-6 separated

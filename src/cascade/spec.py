@@ -61,6 +61,10 @@ class SurfaceSpec:
     actuator_limit_rad: float
     actuator_time_constant_s: float
     actuator_rate_limit_rad_s: float
+    # Chord fraction the separated normal force acts aft of the reference point (a flat
+    # plate's centre of pressure marches from the quarter chord to mid-chord: 0.25). Optional;
+    # zero keeps the separated load at the reference point.
+    separated_center_of_pressure: float = 0.0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
@@ -336,6 +340,9 @@ class AircraftSpec:
             ),
             drag_coefficient_flap=jnp.asarray(
                 [surface.drag_coefficient_flap_rad2 for surface in surfaces]
+            ),
+            separated_center_of_pressure=jnp.asarray(
+                [surface.separated_center_of_pressure for surface in surfaces]
             ),
         )
         propeller_model = PropellerModel(

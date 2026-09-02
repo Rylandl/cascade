@@ -199,7 +199,11 @@ weather; Glassbox the adaptation and the metric.
       seed, git commit); `scripts/benchmark_env.py` (backend-aware, GPU-ready) and
       `scripts/archetype_statistics.py` emit the documented tables; CITATION.cff; `uv build`
       produces 0.2.0 wheels. Not done: publishing to PyPI (user's call), DOI (Zenodo on a tag)
-- [ ] 10f identifiability diagnostics from the existing Jacobians (Cramer-Rao, correlations)
+- [ ] 10f identifiability diagnostics from the existing Jacobians (Cramer-Rao, correlations):
+      Glassbox's (identification); Cascade already exposes the Jacobians
+- [x] 10g separated centre of pressure on component surfaces (`separated_center_of_pressure`,
+      optional per surface, 0.25 flat plate in the archetypes, 0 in the packaged fixtures): the
+      stall pitch break the review said panels lacked; validity stats unchanged (36/40, 38/40)
 ## Phase 11: sim-to-real tooling (proposed)
 - [ ] action latency and jitter (mirror the observation delay), observation spec with an IMU block
       and sensor-unit noise, named randomisation spec, failure-injection API, trajectory logging

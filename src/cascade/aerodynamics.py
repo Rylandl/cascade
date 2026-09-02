@@ -234,7 +234,13 @@ def aerodynamic_coefficients(
     )
     clean_sine = jnp.sin(angle_of_attack)
     normal_clean = surfaces.normal_force_coefficient * clean_sine * smooth_abs(clean_sine)
-    moment_separated = -flap_arm * (normal - normal_clean)
+    # The clean plate's separated normal force acts aft of the reference point by the
+    # surface's separated centre-of-pressure fraction (0.25 for a flat plate whose load
+    # marches from the quarter chord to mid-chord): the stall pitch break of a component
+    # surface. Zero keeps the load at the reference point.
+    moment_separated = -flap_arm * (normal - normal_clean) - (
+        surfaces.separated_center_of_pressure * normal_clean
+    )
 
     separation_state = jnp.clip(aero_state.separation, 0.0, 1.0)
     forced_separation = sigmoid(

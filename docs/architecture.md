@@ -102,7 +102,10 @@ the flap, aft of the quarter chord, in both regimes: the attached flap moment an
 fix that arm at `-Cm_flap / (CLa tau)` chords, and the separated flap load keeps it,
 `Cm_sep = -arm (CN(alpha_sep) - CN(alpha))`. Without it a stalled flying wing has only its
 panels' lever arms about the centre of mass for pitch authority and a tailsitter cannot pitch
-up out of forward flight. A continuous separation fraction blends the two:
+up out of forward flight. The clean plate's separated load acts `separated_center_of_pressure`
+chords aft of the reference point (0.25 for a flat plate), which is the stall pitch break of a
+component surface; the packaged fixtures leave it at zero, the archetypes use the flat-plate
+value. A continuous separation fraction blends the two:
 
 ```text
 C = (1 - separation) C_attached + separation C_separated

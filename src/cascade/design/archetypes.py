@@ -179,6 +179,7 @@ def _surface(
         flap_effectiveness=flap_effectiveness(flap_fraction) if flapped else 0.0,
         moment_coefficient_flap_rad=flap_moment_coefficient(flap_fraction) if flapped else 0.0,
         drag_coefficient_flap_rad2=0.08 if flapped else 0.0,
+        separated_center_of_pressure=0.25,
         control_map_rad=tuple(float(v) for v in control_map),
         actuator_bias_rad=0.0,
         actuator_limit_rad=float(limit_rad),
