@@ -10,6 +10,7 @@ from cascade.vtol import (
     default_hover_gains,
     hover_guidance,
     hover_throttle,
+    initial_hover_state,
     thrust_direction_attitude,
 )
 
@@ -45,7 +46,9 @@ def test_hover_guidance_commands_vertical_attitude_and_hover_throttle_at_rest():
         azimuth_rad=jnp.array(0.0),
     )
 
-    attitude, throttle = hover_guidance(model, default_hover_gains(), setpoint, state, environment)
+    attitude, throttle, _ = hover_guidance(
+        model, default_hover_gains(), initial_hover_state(), setpoint, state, environment, 0.01
+    )
 
     x_body = quaternion_rotate(attitude, jnp.array([1.0, 0.0, 0.0]))
     assert jnp.allclose(x_body, jnp.array([0.0, 0.0, -1.0]), atol=1e-5)
@@ -72,7 +75,9 @@ def test_hover_guidance_tilts_toward_a_position_error_within_the_limit():
         azimuth_rad=jnp.array(0.0),
     )
 
-    attitude, throttle = hover_guidance(model, gains, setpoint, state, environment)
+    attitude, throttle, _ = hover_guidance(
+        model, gains, initial_hover_state(), setpoint, state, environment, 0.01
+    )
 
     x_body = quaternion_rotate(attitude, jnp.array([1.0, 0.0, 0.0]))
     assert x_body[0] > 0.3
@@ -90,15 +95,17 @@ def test_hover_guidance_is_batched_and_differentiable():
         velocity_ned=jnp.zeros((3, 3)),
         azimuth_rad=jnp.zeros(3),
     )
-    attitude, throttle = jax.jit(hover_guidance)(
-        model, default_hover_gains(), setpoint, state, environment
+    attitude, throttle, _ = jax.jit(hover_guidance)(
+        model, default_hover_gains(), initial_hover_state((3,)), setpoint, state, environment, 0.01
     )
     assert attitude.shape == (3, 4)
     assert throttle.shape == (3, 2)
 
     def cost(position_kp):
         gains = default_hover_gains()._replace(position_kp=position_kp)
-        _, throttle = hover_guidance(model, gains, setpoint, state, environment)
+        _, throttle, _ = hover_guidance(
+            model, gains, initial_hover_state((3,)), setpoint, state, environment, 0.01
+        )
         return jnp.sum(throttle)
 
     gradient = jax.grad(cost)(jnp.asarray(2.0))
