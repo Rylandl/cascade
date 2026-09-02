@@ -130,3 +130,32 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       learning; README figure
 - [x] env throughput in docs/environments.md (M3 CPU: 75k aerobatic / 130k X8 env steps/s at
       batch 1024, ten RK4 sub-steps each)
+
+## Phase 7: archetypes, diverse airframes, and weather (proposed 2026-09-02)
+Direction: the Glassbox demonstration that a learner with no a priori information can control
+diverse fixed-wing airframes quickly in real weather. Cascade supplies the family and the
+weather; Glassbox the adaptation and the metric.
+- [x] 7a `cascade.archetypes` (2026-09-02): parametric designs -> `AircraftSpec` on the panel backend.
+      Flying wing (span, aspect ratio, wing loading, sweep, taper, washout, reflex, static margin,
+      elevon span/chord fractions, winglet size, thrust-to-weight, prop diameter, motor layout
+      incl. the tailsitter twin) and conventional (span, aspect ratio, wing loading, camber,
+      dihedral, tail arm, horizontal/vertical tail volume coefficients, static margin, control
+      chord fractions, tail arrangement: conventional / V-tail / cruciform, thrust-to-weight,
+      prop diameter). Derived physics: panel discretisation by sweep/taper, lift slope from
+      aspect ratio (Helmbold), induced-drag factor from span efficiency, flap effectiveness and
+      flap moment from chord fraction (thin-airfoil), static wing downwash folded into the tail's
+      effective slope and incidence, propwash weights from disk coverage, inertia from geometry
+      and a mass split (wing, pod/fuselage, tail, battery). `sample_designs(archetype, key, n,
+      ranges)` and `validate_design` (trim at design speed within limits, positive static
+      margin, control authority floor, damped short period) with resampling. Tests: nominal
+      designs trim and are controllable; sampled batches are mostly valid and visibly diverse
+      (spread of trim alpha, throttle, short-period and roll modes).
+- [x] 7b auto-tuned baseline (`cascade.autotune`, 2026-09-02): trim -> linearise -> rate/attitude gains from the linear model
+      -> guidance gains from timescales -> step-response check, for any spec. The reference
+      controller every sampled airframe gets without a human, and the yardstick for "learned
+      quickly with no a priori information".
+- [ ] 7c weather: altitude-dependent wind field (log shear), MIL-F-8785C turbulence classes,
+      discrete gusts, ISA density; `weather` sampler that replays hourly station records as
+      episode conditions; `cascade.env` draws a design and a weather condition per episode.
+- [ ] 7d hidden-parameter protocol for Glassbox: the env exposes channel count and observations
+      only; design parameters are recorded alongside for analysis, never observed.

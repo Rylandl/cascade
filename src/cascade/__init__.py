@@ -127,6 +127,21 @@ from cascade.vtol import (
 )
 
 __all__ = [
+    "ConventionalDesign",
+    "DesignReport",
+    "StepReport",
+    "TuningReport",
+    "step_response",
+    "tune_cascade",
+    "FlyingWingDesign",
+    "control_authority",
+    "conventional_spec",
+    "cruise_speed",
+    "design_spec",
+    "flying_wing_spec",
+    "sample_design",
+    "sample_designs",
+    "validate_design",
     "EnvState",
     "EpisodeConfig",
     "HoverTask",

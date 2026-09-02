@@ -1,0 +1,69 @@
+# Airframe archetypes and automatic tuning
+
+`cascade.archetypes` turns a handful of design decisions into a full aircraft specification on
+the panel backend, and `cascade.autotune` tunes the control cascade for any specification from
+its own trim and linearisation. Together they produce a family of visibly different, flyable
+airframes, each with a reference controller no human tuned, whose parameters a learner never
+sees. The designs are plausible, not validated against real aircraft; their job is diversity.
+
+## Designs
+
+| archetype | design decisions |
+| --- | --- |
+| `FlyingWingDesign` | span, aspect ratio, wing loading, sweep, taper, washout, reflex, camber, static margin, elevon span and chord fractions, winglet area fraction, thrust-to-weight, propeller diameter fraction, motor layout (`pusher` or `twin_tractor`, the tailsitter's), pod mass fraction, cruise lift coefficient |
+| `ConventionalDesign` | span, aspect ratio, wing loading, camber, dihedral, tail arm (chords), horizontal and vertical tail volume coefficients, static margin, aileron span and chord fractions, elevator and rudder chord fractions, tail arrangement (`conventional` or `v_tail`), thrust-to-weight, propeller diameter fraction, pod mass fraction, cruise lift coefficient |
+
+`design_spec(design)` builds the `AircraftSpec` (`flying_wing_spec`, `conventional_spec`),
+`cruise_speed(design)` gives the design speed from wing loading and cruise lift coefficient,
+and `sample_design` / `sample_designs` draw designs uniformly from `FLYING_WING_RANGES` and
+`CONVENTIONAL_RANGES` (override any range with a dict).
+
+## Relations
+
+Textbook, and stated in the code:
+
+- Wing lift slope from aspect ratio and sweep (Helmbold); induced-drag factor from span
+  efficiency 0.85.
+- Plain-flap effectiveness and quarter-chord flap moment from chord fraction (thin airfoil,
+  reduced for viscosity), so an elevon or aileron chord fraction sets both lift and moment.
+- Sweep and taper place three panels per wing half along the quarter-chord line; washout sets
+  each panel's incidence; reflex is the section zero-lift moment.
+- Static margin places the centre of mass ahead of the neutral point of the panels (tail
+  included, with static downwash `2 CL_alpha / (pi AR)` folded into the tail's effective slope
+  and its cruise downwash into its incidence).
+- Tail volume coefficients and tail arm size the tails; a V-tail is two tilted panels carrying
+  the horizontal and vertical volumes with a ruddervator mix in the control map.
+- Propwash weights from how much of each panel the disk covers; the propeller's static thrust
+  from thrust-to-weight and its pitch from cruise (zero-thrust airspeed at full speed is 1.6
+  times cruise).
+- Inertia from thin-plate panels, tails, motors, and a central pod, with a mass split.
+
+## Validation
+
+`validate_design(design)` trims at cruise, linearises, and returns a `DesignReport`. A design
+passes when it trims within limits and 3° below stall, has pitch and roll authority above
+15 rad/s² per unit channel (yaw above 3 with a rudder), and has no unstable mode faster than
+a spiral. Authority is the Jacobian of angular acceleration with respect to the channels with
+the surfaces at their steady deflection (`control_authority`), so actuator lag does not hide
+it. From the default ranges about 9 in 10 sampled designs of either archetype pass; the rest
+fail at trim or stall margin (flying wings) or at tail authority (conventional).
+
+Sampled families are visibly diverse: across 40 designs per archetype the cruise speed spans
+8 to 23 m/s, the short-period frequency 1 to 3.8 Hz, and pitch authority 23 to 540 rad/s².
+
+## Automatic tuning
+
+`tune_cascade(spec, cruise_speed)` trims, measures each axis's authority and rate damping
+(from the linearised step), and places each rate loop at a bandwidth the actuators support
+(`0.35 / lag`, at most 12 rad/s, yaw at half): `kp = (bandwidth - damping) / authority`,
+`ki = kp · bandwidth`, feedforward half the damping over authority. Attitude gains sit at
+bandwidth over 2.5. The airspeed gain comes from the measured acceleration per unit throttle,
+the pitch ceiling keeps a climb at the rate limit 2° below stall, and channel signs come from
+the sign of the measured authority, so a reversed control map tunes itself. `step_response`
+flies a 0.5 rad heading step and a 5 m altitude step from the trim and reports whether the
+cascade settles.
+
+The tuner settles the two packaged aircraft and all four nominal archetypes within 1° of
+heading and 0.15 m of altitude, and generalises to sampled designs (`tests/test_autotune.py`).
+`examples/archetypes.py` prints a table of sampled designs, their reports, and their tuned
+gains.

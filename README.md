@@ -32,7 +32,8 @@ coefficient sweeps, and local linearization; [aircraft specifications](docs/airc
 documents the versioned TOML format; [the control guide](docs/control.md) covers the rate/attitude/
 guidance cascade, channel-map sign conventions, tuning, and differentiable-tuning examples;
 [environments](docs/environments.md) covers the native-JAX episode functions for learning and
-trajectory optimisation.
+trajectory optimisation; [archetypes](docs/archetypes.md) covers parametric airframe families
+and automatic controller tuning.
 
 ## Install
 

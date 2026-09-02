@@ -216,6 +216,10 @@ rendering and hardware adapters         boundary coordinate conversion
 
 ### Milestone 3 — autonomy tooling
 
+- Done: `cascade.archetypes` and `cascade.autotune` — parametric flying-wing and conventional
+  designs from a handful of decisions, validity checks, and a cascade tuned from trim and
+  linearisation for any spec. See `docs/archetypes.md`.
+
 - Direct-actuator Gymnasium and native-JAX environments.
 - Done: `cascade.env` — native-JAX episode functions (reset, step, policy rollout) over
   tracking, hover, and transition tasks with the control cascade and the transition controller
