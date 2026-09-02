@@ -121,4 +121,6 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
 - [ ] 6o candidates: learn the tailsitter transition (the transition task) by the same loop;
       Glassbox re-evaluation of the X8 panels model after the post-stall flap-moment change (the
       campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set (corridor, round trip,
-      gusts); benchmark numbers for the env (episodes/s at batch 1024 on CPU) in docs
+      gusts)
+- [x] env throughput in docs/environments.md (M3 CPU: 75k aerobatic / 130k X8 env steps/s at
+      batch 1024, ten RK4 sub-steps each)

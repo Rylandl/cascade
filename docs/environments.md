@@ -123,3 +123,20 @@ from perturbed starts (4 s horizon at 40 Hz, batches of 16 episodes):
 
 Sixty steps through the physics match a hand-tuned three-loop cascade. The same loop runs
 unchanged on a batch of randomised models, which is how a robust policy is trained here.
+
+## Throughput
+
+One control step is ten RK4 sub-steps of the full model (six-surface panels, actuator lags,
+stall dynamics, propeller inflow) at 400 Hz. Measured on an Apple M3 CPU while the machine was
+also running other work, so these are conservative:
+
+| aircraft | batch | ms per control step | env steps / s | RK4 steps / s |
+| --- | ---: | ---: | ---: | ---: |
+| aerobatic reference | 1 | 0.08 | 12 000 | 120 000 |
+| aerobatic reference | 1024 | 13.7 | 75 000 | 750 000 |
+| aerobatic reference | 4096 | 43.8 | 94 000 | 940 000 |
+| Skywalker X8 (coefficient backend) | 1 | 0.07 | 15 000 | 150 000 |
+| Skywalker X8 (coefficient backend) | 1024 | 7.9 | 130 000 | 1 300 000 |
+
+A 4 s episode at 40 Hz is 160 control steps, so batch 1024 runs about 500 episodes per second
+on this CPU; a GPU vmap is the same code.
