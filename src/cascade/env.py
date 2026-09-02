@@ -24,6 +24,13 @@ import jax.numpy as jnp
 from jax import Array
 
 from cascade.analysis.trim import StraightFlightCondition, trim_straight_flight
+from cascade.control import (
+    CascadeController,
+    CascadeState,
+    GuidanceSetpoint,
+    cascade_step,
+    initial_cascade_state,
+)
 from cascade.initialization import (
     control_from_array,
     control_to_array,
@@ -433,3 +440,70 @@ def rollout_actions(
 
     (final, _), outputs = jax.lax.scan(scan_step, (state, jnp.zeros((), bool)), actions)
     return final, outputs
+
+
+def rollout_policy(
+    model: AircraftModel,
+    config: EpisodeConfig,
+    task: Task,
+    reference: Reference,
+    state: EnvState,
+    policy,
+    policy_state,
+) -> tuple[EnvState, tuple[Array, Array, Array, Array]]:
+    """Scan a policy over the horizon; returns the final state and (observations, actions,
+    rewards, dones), rewards zeroed after the first ``done``.
+
+    ``policy(policy_state, observation, env_state) -> (action, policy_state)``: a learned policy
+    reads the observation and ignores the environment state; a model-based baseline such as
+    :func:`cascade_policy` may read the state directly.
+    """
+
+    first_observation = observation(model, task, reference, state)
+
+    def scan_step(carry, _):
+        state, obs, policy_state, finished = carry
+        action, policy_state = policy(policy_state, obs, state)
+        next_state, next_obs, reward, done, _ = step(model, config, task, reference, state, action)
+        reward = jnp.where(finished, 0.0, reward)
+        return (next_state, next_obs, policy_state, finished | done), (obs, action, reward, done)
+
+    (final, _, _, _), outputs = jax.lax.scan(
+        scan_step,
+        (state, first_observation, policy_state, jnp.zeros((), bool)),
+        None,
+        length=config.horizon_steps,
+    )
+    return final, outputs
+
+
+def cascade_policy(
+    controller: CascadeController,
+    model: AircraftModel,
+    config: EpisodeConfig,
+    task: TrackingTask,
+    reference: Reference,
+):
+    """The control cascade as a policy for a tracking task: the reference score for a learner.
+
+    Every loop runs at the environment's control rate (the controller's periods are replaced
+    by one), so the baseline sees exactly what a learned policy sees in time. Returns the
+    policy function and its initial :class:`CascadeState`, holding the reference control until
+    the first update.
+    """
+
+    if not isinstance(task, TrackingTask):
+        raise TypeError("cascade_policy needs a TrackingTask; the cascade has no hover mode")
+    controller = controller._replace(rate_period=1, attitude_period=1, guidance_period=1)
+    setpoint = GuidanceSetpoint(
+        airspeed_m_s=task.airspeed_m_s, altitude_m=task.altitude_m, heading_rad=task.heading_rad
+    )
+    period = 1.0 / config.control_frequency_hz
+
+    def policy(cascade_state: CascadeState, obs: Array, env_state: EnvState):
+        control, cascade_state = cascade_step(
+            controller, cascade_state, setpoint, env_state.aircraft, reference.environment, period
+        )
+        return control_to_action(config, control), cascade_state
+
+    return policy, initial_cascade_state(controller, reference.state, reference.control)

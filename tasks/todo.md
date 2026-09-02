@@ -108,8 +108,10 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       tracking task, vmap-batched, differentiable through the episode (docs/environments.md)
 - [x] 6j `HoverTask` + `hover_reference` for `cascade.env` (tailsitter hover: position, velocity,
       belly azimuth); body-frame position error joins the observation
-- [ ] 6k candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
+- [x] 6k `rollout_policy` + `cascade_policy` baseline (the cascade at the control rate; on the
+      aerobatic tracking task from perturbed starts: no crashes, mean reward > 0.6, > 0.8 settled)
+- [ ] 6l candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
       flap-moment change (the campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set
-      (corridor, round trip, gusts); a transition task (hover -> cruise reward) for `cascade.env`;
-      a policy-rollout helper (`rollout_policy`) and a baseline that wraps the control cascade as
-      a policy so learned policies have a reference score
+      (corridor, round trip, gusts); a transition task (hover -> cruise reward) for `cascade.env`
+      with the transition controller as its baseline; domain randomisation over model parameters
+      through `broadcast_model` in `reset`

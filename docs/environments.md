@@ -32,6 +32,8 @@ states, observations, rewards, dones, info = env_step(states, actions)   # actio
 | `reset` | Gaussian perturbation of the reference in position, velocity, body-frame attitude, and rates; actuators equilibrated to the trim control |
 | `step` | holds a normalised `[-1, 1]` action for one control period of RK4 sub-steps; returns state, observation, reward, done, info |
 | `rollout_actions` | scans a time-major action sequence; rewards after the first `done` are zeroed so the sum is the return |
+| `rollout_policy` | scans `policy(policy_state, observation, env_state)` over the horizon; learned policies read the observation, model-based baselines may read the state |
+| `cascade_policy` | the control cascade as a policy for a tracking task, every loop at the control rate: the reference score for a learner |
 | `action_to_control` / `control_to_action` | throttles map `[-1, 1]` to `[0, 1]`; channels scale by `channel_scale` into spec units |
 
 ## Observation
@@ -66,3 +68,11 @@ There is no Gymnasium dependency. A single-episode `gymnasium.Env` is a few line
 functions: keep an `EnvState`, call `reset` with a fresh key in `reset(seed=...)`, call `step`
 in `step(action)`, and convert with `np.asarray`. Batched training loops should stay in JAX and
 vmap the functions directly; that is where the speed is.
+
+## Baseline
+
+`cascade_policy` wraps a tuned `CascadeController` as a policy, every loop at the environment's
+control rate, so a learned policy has a reference score on the same task, resets, and horizon.
+On the aerobatic reference's 12 m/s tracking task from perturbed starts (2 m, 1 m/s, 0.1 rad,
+0.2 rad/s) at 40 Hz it crashes no episodes and earns a mean reward above 0.6 over 60 steps and
+above 0.8 once settled.

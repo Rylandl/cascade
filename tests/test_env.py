@@ -182,3 +182,48 @@ def test_hover_return_is_differentiable_in_the_actions(hover_setup):
 
     gradient = jax.jit(jax.grad(episode_return))(actions)
     assert jnp.all(jnp.isfinite(gradient)) and float(jnp.max(jnp.abs(gradient))) > 0.0
+
+
+def test_rollout_policy_with_a_constant_policy_matches_rollout_actions(setup):
+    from cascade.env import action_size, rollout_policy
+
+    model, config, task, reference = setup
+    state, _ = reset(model, config, task, reference, jax.random.PRNGKey(7))
+    action = control_to_action(config, reference.control)
+    constant = lambda policy_state, obs, env_state: (action, policy_state)  # noqa: E731
+    final_a, (_, rewards_a, _) = rollout_actions(
+        model,
+        config,
+        task,
+        reference,
+        state,
+        jnp.broadcast_to(action, (config.horizon_steps, action_size(model))),
+    )
+    final_b, (_, actions_b, rewards_b, _) = rollout_policy(
+        model, config, task, reference, state, constant, None
+    )
+    assert jnp.allclose(rewards_a, rewards_b)
+    assert jnp.allclose(final_a.aircraft.rigid_body.position, final_b.aircraft.rigid_body.position)
+    assert actions_b.shape == (config.horizon_steps, action_size(model))
+
+
+def test_cascade_baseline_tracks_the_reference_from_perturbed_starts(setup):
+    from cascade.control import aerobatic_reference_controller
+    from cascade.env import cascade_policy, rollout_policy
+
+    model, config, task, reference = setup
+    policy, policy_state = cascade_policy(
+        aerobatic_reference_controller(), model, config, task, reference
+    )
+    keys = jax.random.split(jax.random.PRNGKey(11), 8)
+    states, _ = jax.vmap(lambda k: reset(model, config, task, reference, k))(keys)
+    run = jax.jit(
+        jax.vmap(lambda s: rollout_policy(model, config, task, reference, s, policy, policy_state))
+    )
+    finals, (observations, actions, rewards, dones) = run(states)
+    assert jnp.all(jnp.isfinite(observations)) and jnp.all(jnp.abs(actions) <= 1.0 + 1e-6)
+    # No crashes: only the horizon ends the episodes.
+    assert not bool(dones[:, :-1].any())
+    # The baseline earns a reference score a learner can be judged against.
+    assert float(jnp.mean(rewards)) > 0.6
+    assert float(jnp.mean(rewards[:, -10:])) > 0.8
