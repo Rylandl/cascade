@@ -75,9 +75,42 @@ def test_mjcf_loads_in_mujoco_and_flaps_hinge_trailing_edge_down(name):
     assert model.nq == 7 + model.njnt - 1
     scene = Scene(spec, width=64, height=48)
     try:
-        state = cascade.zero_state(spec.to_model(), altitude=20.0)
+        from cascade.math import quaternion_from_euler
+
+        model_ = spec.to_model()
+        state = cascade.zero_state(model_, altitude=20.0)
         scene.pose(state)
         assert abs(float(scene.data.qpos[2]) - 20.0) < 1e-6  # NWU z up
+
+        def world(part_name):
+            geom = mujoco.mj_name2id(scene.model, mujoco.mjtObj.mjOBJ_GEOM, part_name)
+            return scene.data.geom_xpos[geom].copy()
+
+        # A right bank (FRD positive roll) lowers whatever sits at negative FLU y, and a
+        # nose-up pitch raises the propeller above the aircraft's centre: the pose is applied.
+        propeller = world("propeller_0")
+        rolled = state._replace(
+            rigid_body=state.rigid_body._replace(
+                attitude=quaternion_from_euler(np.deg2rad(30.0), 0.0, 0.0)
+            )
+        )
+        scene.pose(rolled)
+        right_side = [
+            world(p.name) for p in scene.parts if p.kind == "box" and p.position[1] < -1e-3
+        ]
+        left_side = [world(p.name) for p in scene.parts if p.kind == "box" and p.position[1] > 1e-3]
+        if right_side and left_side:
+            assert np.mean([w[2] for w in right_side]) < np.mean([w[2] for w in left_side])
+        pitched = state._replace(
+            rigid_body=state.rigid_body._replace(
+                attitude=quaternion_from_euler(0.0, np.deg2rad(30.0), 0.0)
+            )
+        )
+        scene.pose(pitched)
+        nose_up = world("propeller_0")
+        forward = propeller[0] - float(scene.data.qpos[0])
+        if abs(forward) > 1e-3:
+            assert (nose_up[2] - 20.0) * np.sign(forward) > 0.1 * abs(forward)
         if scene.flap_joints:
             surface, address = next(iter(scene.flap_joints.items()))
             part = next(p for p in scene.parts if p.surface == surface and p.hinge is not None)

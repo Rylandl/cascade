@@ -69,9 +69,10 @@ class Scene:
         """Set the free joint from the rigid-body state (NED/FRD to NWU/FLU), the flaps from
         the actuator deflections, spin the propellers by ``dt``, and colour the panels."""
 
+        # Canonical layout: position (0:3), velocity (3:6), attitude wxyz (6:10), rates.
         canonical = np.asarray(rigid_body_to_canonical(state.rigid_body), dtype=float)
         self.data.qpos[0:3] = canonical[0:3]
-        self.data.qpos[3:7] = canonical[3:7]
+        self.data.qpos[3:7] = canonical[6:10]
         deflection = np.asarray(state.actuators.surface_deflection, dtype=float)
         for surface, address in self.flap_joints.items():
             self.data.qpos[address] = deflection[surface]
