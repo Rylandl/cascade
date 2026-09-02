@@ -76,3 +76,17 @@ control rate, so a learned policy has a reference score on the same task, resets
 On the aerobatic reference's 12 m/s tracking task from perturbed starts (2 m, 1 m/s, 0.1 rad,
 0.2 rad/s) at 40 Hz it crashes no episodes and earns a mean reward above 0.6 over 60 steps and
 above 0.8 once settled.
+
+## Domain randomisation
+
+`reset` and `step` take the model as an argument, so a batch of models is a batch of worlds:
+`broadcast_model` the validated model to a leading batch shape, perturb leaves with indexed
+updates (mass, inertia, a coefficient, an actuator lag), and vmap the episode functions over
+models and keys together. The trimmed reference stays the nominal one, so each episode also
+starts with the mismatch a real vehicle has from its nominal model.
+
+```python
+models = broadcast_model(model, (1024,))
+models = models._replace(mass=models.mass * jax.random.uniform(key, (1024,), minval=0.8, maxval=1.2))
+states, obs = jax.vmap(lambda m, k: reset(m, config, task, reference, k))(models, keys)
+```

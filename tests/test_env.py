@@ -227,3 +227,27 @@ def test_cascade_baseline_tracks_the_reference_from_perturbed_starts(setup):
     # The baseline earns a reference score a learner can be judged against.
     assert float(jnp.mean(rewards)) > 0.6
     assert float(jnp.mean(rewards[:, -10:])) > 0.8
+
+
+def test_episodes_vmap_over_randomised_models(setup):
+    from cascade.model import broadcast_model
+
+    model, config, task, reference = setup
+    scales = jnp.array([0.8, 1.0, 1.2])
+    models = broadcast_model(model, (3,))
+    models = models._replace(
+        mass=models.mass * scales, inertia=models.inertia * scales[:, None, None]
+    )
+    keys = jax.random.split(jax.random.PRNGKey(13), 3)
+    batched_reset = jax.jit(jax.vmap(lambda m, k: reset(m, config, task, reference, k)))
+    states, observations = batched_reset(models, keys)
+    assert observations.shape[0] == 3 and jnp.all(jnp.isfinite(observations))
+    action = control_to_action(config, reference.control)
+    batched_step = jax.jit(
+        jax.vmap(lambda m, s: step(m, config, task, reference, s, action), in_axes=(0, 0))
+    )
+    next_states, observations, rewards, dones, _ = batched_step(models, states)
+    assert jnp.all(jnp.isfinite(observations)) and rewards.shape == (3,)
+    # The trim control lifts the light aircraft and lets the heavy one sink: the models differ.
+    climb = -next_states.aircraft.rigid_body.velocity[:, 2]
+    assert float(climb[0]) > float(climb[2])
