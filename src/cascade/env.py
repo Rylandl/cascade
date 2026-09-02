@@ -57,6 +57,12 @@ from cascade.vtol import (
     thrust_direction_attitude,
     transition_step,
 )
+from cascade.weather import (
+    WeatherCondition,
+    initial_gust_state,
+    mean_wind_ned,
+    step_gust,
+)
 
 
 @dataclass(frozen=True)
@@ -295,6 +301,14 @@ class EnvState(NamedTuple):
     key: Array
     sensor_bias: Array
     observation_buffer: Array
+    gust: Array
+    wind_ned: Array
+
+
+def current_environment(reference: Reference, state: EnvState) -> Environment:
+    """The reference environment with this step's wind (mean profile plus gust)."""
+
+    return reference.environment._replace(wind=state.wind_ned)
 
 
 def tracking_task(
@@ -424,18 +438,30 @@ def reset(
     reference: Reference,
     key: Array,
     noise: SensorNoise | None = None,
+    weather: WeatherCondition | None = None,
 ) -> tuple[EnvState, Array]:
     """Draw an initial state around the reference; returns the state and first observation.
 
     ``noise`` (default none) adds white sensor noise to every observation and draws a
     per-episode bias here; the true observation is always available from :func:`observation`.
+    ``weather`` (default the reference's own wind, usually none) sets the mean wind profile
+    and turbulence for the episode; the initial ground velocity is shifted by the wind at the
+    start altitude so the aircraft begins at its trimmed airspeed.
     """
 
     noise = sensor_noise() if noise is None else noise
     key, k_position, k_velocity, k_attitude, k_rate, k_bias, k_noise = jax.random.split(key, 7)
     rigid = reference.state.rigid_body
     position = rigid.position + config.reset_position_std_m * jax.random.normal(k_position, (3,))
-    velocity = rigid.velocity + config.reset_velocity_std_m_s * jax.random.normal(k_velocity, (3,))
+    if weather is None:
+        wind = reference.environment.wind
+    else:
+        wind = mean_wind_ned(weather, -position[..., 2])
+    velocity = (
+        rigid.velocity
+        + (wind - reference.environment.wind)
+        + config.reset_velocity_std_m_s * jax.random.normal(k_velocity, (3,))
+    )
     rotation = config.reset_attitude_std_rad * jax.random.normal(k_attitude, (3,))
     attitude = normalize(quaternion_multiply(rigid.attitude, _quaternion_from_rotvec(rotation)))
     rate = rigid.angular_velocity + config.reset_rate_std_rad_s * jax.random.normal(k_rate, (3,))
@@ -455,6 +481,8 @@ def reset(
         key=key,
         sensor_bias=bias,
         observation_buffer=jnp.zeros((config.observation_delay_steps + 1, white.shape[0])),
+        gust=initial_gust_state(),
+        wind_ned=wind,
     )
     sensed = _sense(model, task, reference, partial, white, k_noise)
     buffer = jnp.broadcast_to(sensed, partial.observation_buffer.shape)
@@ -505,7 +533,7 @@ def observation(model: AircraftModel, task: Task, reference: Reference, state: E
     """
 
     rigid = state.aircraft.rigid_body
-    environment = reference.environment
+    environment = current_environment(reference, state)
     air_body = quaternion_rotate_inverse(rigid.attitude, rigid.velocity - environment.wind)
     airspeed = safe_norm(air_body)
     alpha = jnp.arctan2(air_body[..., 2], air_body[..., 0])
@@ -563,11 +591,14 @@ def step(
     state: EnvState,
     action: Array,
     noise: SensorNoise | None = None,
+    weather: WeatherCondition | None = None,
 ) -> tuple[EnvState, Array, Array, Array, dict[str, Array]]:
     """Hold ``action`` for one control period; returns state, observation, reward, done, info.
 
     The returned observation carries the sensor ``noise`` (white noise drawn from the episode
-    key, plus the bias drawn at reset) and the configured delay.
+    key, plus the bias drawn at reset) and the configured delay. With ``weather`` the wind
+    for the period is the mean profile at the aircraft's altitude plus a Dryden gust advanced
+    from the episode key; without it the reference wind holds.
 
     ``done`` is true on a crash (below ``crash_altitude_m``), on leaving the upright envelope
     (the body down axis more than ``upright_limit_rad`` from gravity), or at the horizon; the
@@ -576,16 +607,17 @@ def step(
 
     control = action_to_control(model, config, action)
     controls = repeat_control(control, config.substeps)
+    environment = current_environment(reference, state)
     aircraft, _ = rollout(
         model,
         state.aircraft,
         controls,
-        reference.environment,
+        environment,
         config.simulation_dt_s,
         step=config.step,
     )
     rigid = aircraft.rigid_body
-    cost = task.cost(rigid, reference.environment, action)
+    cost = task.cost(rigid, environment, action)
     down_body = quaternion_rotate_inverse(rigid.attitude, normalize(reference.environment.gravity))
     crashed = (-rigid.position[..., 2] < config.crash_altitude_m) | (
         down_body[..., 2] < jnp.cos(config.upright_limit_rad)
@@ -594,9 +626,23 @@ def step(
     truncated = next_step >= config.horizon_steps
     reward = jnp.where(crashed, 0.0, jnp.exp(-cost))
     noise = sensor_noise() if noise is None else noise
-    key, k_noise = jax.random.split(state.key)
+    key, k_noise, k_gust = jax.random.split(state.key, 3)
     white, _ = _noise_vectors(model, noise)
-    advanced = state._replace(aircraft=aircraft, step=next_step, key=key)
+    if weather is None:
+        gust, wind = state.gust, state.wind_ned
+    else:
+        air = rigid.velocity - environment.wind
+        gust, gust_ned = step_gust(
+            weather,
+            state.gust,
+            k_gust,
+            1.0 / config.control_frequency_hz,
+            airspeed_m_s=safe_norm(air),
+            altitude_m=-rigid.position[..., 2],
+            heading_rad=jnp.arctan2(air[..., 1], air[..., 0]),
+        )
+        wind = mean_wind_ned(weather, -rigid.position[..., 2]) + gust_ned
+    advanced = state._replace(aircraft=aircraft, step=next_step, key=key, gust=gust, wind_ned=wind)
     sensed = _sense(model, task, reference, advanced, white, k_noise)
     buffer = jnp.concatenate((state.observation_buffer[1:], sensed[None]), axis=0)
     next_state = advanced._replace(observation_buffer=buffer)
@@ -612,6 +658,7 @@ def rollout_actions(
     state: EnvState,
     actions: Array,
     noise: SensorNoise | None = None,
+    weather: WeatherCondition | None = None,
 ) -> tuple[EnvState, tuple[Array, Array, Array]]:
     """Scan a time-major action sequence; returns the final state and (observations, rewards,
     dones). Rewards after the first ``done`` are zeroed, so the sum is the episode return."""
@@ -619,7 +666,7 @@ def rollout_actions(
     def scan_step(carry, action):
         state, finished = carry
         next_state, obs, reward, done, _ = step(
-            model, config, task, reference, state, action, noise
+            model, config, task, reference, state, action, noise, weather
         )
         reward = jnp.where(finished, 0.0, reward)
         return (next_state, finished | done), (obs, reward, done)
@@ -637,6 +684,7 @@ def rollout_policy(
     policy,
     policy_state,
     noise: SensorNoise | None = None,
+    weather: WeatherCondition | None = None,
 ) -> tuple[EnvState, tuple[Array, Array, Array, Array]]:
     """Scan a policy over the horizon; returns the final state and (observations, actions,
     rewards, dones), rewards zeroed after the first ``done``.
@@ -652,7 +700,7 @@ def rollout_policy(
         state, obs, policy_state, finished = carry
         action, policy_state = policy(policy_state, obs, state)
         next_state, next_obs, reward, done, _ = step(
-            model, config, task, reference, state, action, noise
+            model, config, task, reference, state, action, noise, weather
         )
         reward = jnp.where(finished, 0.0, reward)
         return (next_state, next_obs, policy_state, finished | done), (obs, action, reward, done)
@@ -691,7 +739,12 @@ def cascade_policy(
 
     def policy(cascade_state: CascadeState, obs: Array, env_state: EnvState):
         control, cascade_state = cascade_step(
-            controller, cascade_state, setpoint, env_state.aircraft, reference.environment, period
+            controller,
+            cascade_state,
+            setpoint,
+            env_state.aircraft,
+            current_environment(reference, env_state),
+            period,
         )
         return control_to_action(config, control), cascade_state
 
@@ -731,7 +784,7 @@ def transition_policy(
             hover_setpoint,
             forward_setpoint,
             env_state.aircraft,
-            reference.environment,
+            current_environment(reference, env_state),
             period,
         )
         return control_to_action(config, control), transition_state

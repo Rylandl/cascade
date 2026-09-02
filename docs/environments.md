@@ -62,6 +62,13 @@ reading from that many control periods ago. Both are pure functions of the episo
 noisy episode is still reproducible and differentiable; the true observation is always
 available from `observation`.
 
+## Weather
+
+`reset` and `step` take an optional `WeatherCondition` (`cascade.weather`): a mean wind with a
+logarithmic profile over the site's roughness and Dryden turbulence advanced every period at
+the aircraft's altitude, from a MIL-F-8785C class or a draw from station records. See
+`docs/weather.md`.
+
 ## Reward and termination
 
 The reward is `exp(-cost)` in `(0, 1]`, with cost the task's weighted sum: for tracking, squared

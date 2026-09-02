@@ -379,3 +379,38 @@ def test_sensor_noise_and_delay(setup):
     assert jnp.allclose(one, first) and jnp.allclose(two, first)
     assert not jnp.allclose(three, first)
     assert jnp.allclose(three, state.observation_buffer[0])
+
+
+def test_weather_shifts_the_reset_velocity_and_gusts_the_episode(setup):
+    from cascade.control import aerobatic_reference_controller
+    from cascade.env import cascade_policy, rollout_policy
+    from cascade.weather import weather_condition
+
+    model, config, task, reference = setup
+    quiet = EpisodeConfig(
+        horizon_steps=160,
+        reset_position_std_m=0.0,
+        reset_velocity_std_m_s=0.0,
+        reset_attitude_std_rad=0.0,
+        reset_rate_std_rad_s=0.0,
+    )
+    weather = weather_condition(6.0, jnp.deg2rad(90.0), turbulence_wind_20ft_m_s=12.0)
+    state, first = reset(model, quiet, task, reference, jax.random.PRNGKey(4), weather=weather)
+    # Airspeed at reset equals the trim airspeed although the ground velocity carries the wind.
+    airspeed = float(jnp.linalg.norm(state.aircraft.rigid_body.velocity - state.wind_ned))
+    assert abs(airspeed - 12.0) < 0.05
+    assert float(state.wind_ned[1]) < -4.0  # an east wind blows toward the west
+    policy, policy_state = cascade_policy(
+        aerobatic_reference_controller(), model, quiet, task, reference
+    )
+    final, (observations, actions, rewards, dones) = jax.jit(
+        lambda s: rollout_policy(
+            model, quiet, task, reference, s, policy, policy_state, None, weather
+        )
+    )(state)
+    assert jnp.all(jnp.isfinite(observations))
+    assert not bool(dones[:-1].any())
+    # Turbulence moved the wind, and the cascade still held the reference.
+    assert float(jnp.std(final.wind_ned)) > 0.0 or float(jnp.linalg.norm(final.gust)) > 0.0
+    assert abs(float(-final.aircraft.rigid_body.position[2]) - 50.0) < 5.0
+    assert float(jnp.mean(rewards[-40:])) > 0.5

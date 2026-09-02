@@ -125,6 +125,15 @@ from cascade.vtol import (
     trapezoid_speed_profile,
     velocity_ramp_schedule,
 )
+from cascade.weather import (
+    WeatherCondition,
+    WeatherRecords,
+    mean_wind_ned,
+    sample_weather,
+    sample_weather_uniform,
+    weather_classes,
+    weather_condition,
+)
 
 __all__ = [
     "ConventionalDesign",
@@ -149,12 +158,19 @@ __all__ = [
     "SensorNoise",
     "TrackingTask",
     "TransitionTask",
+    "WeatherCondition",
+    "WeatherRecords",
     "action_size",
     "action_to_control",
     "cascade_policy",
     "control_to_action",
     "hover_reference",
     "hover_task",
+    "mean_wind_ned",
+    "sample_weather",
+    "sample_weather_uniform",
+    "weather_classes",
+    "weather_condition",
     "observation",
     "reset",
     "rollout_actions",

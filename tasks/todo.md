@@ -154,8 +154,8 @@ weather; Glassbox the adaptation and the metric.
       -> guidance gains from timescales -> step-response check, for any spec. The reference
       controller every sampled airframe gets without a human, and the yardstick for "learned
       quickly with no a priori information".
-- [ ] 7c weather: altitude-dependent wind field (log shear), MIL-F-8785C turbulence classes,
-      discrete gusts, ISA density; `weather` sampler that replays hourly station records as
-      episode conditions; `cascade.env` draws a design and a weather condition per episode.
+- [x] 7c weather (2026-09-02): `cascade.weather` (log profile, classes, per-step Dryden gusts at
+      the aircraft's altitude, station records CSV + sampling) wired into `cascade.env`
+      reset/step/rollouts. Not done: discrete 1-cos gusts, ISA density with altitude.
 - [ ] 7d hidden-parameter protocol for Glassbox: the env exposes channel count and observations
       only; design parameters are recorded alongside for analysis, never observed.

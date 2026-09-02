@@ -232,6 +232,9 @@ rendering and hardware adapters         boundary coordinate conversion
   differentiable and batchable, with a closed-loop rollout and tuned default controllers for both
   packaged aircraft. See `docs/control.md`.
 - Domain randomization, gust models, and observation/sensor models.
+- Done: `cascade.weather` — mean wind with a log profile, MIL-F-8785C classes, per-step Dryden
+  gusts at the aircraft's altitude, and station-record sampling, wired into `cascade.env`.
+  See `docs/weather.md`.
 - MPC and trajectory-optimization examples through stall and transition.
 
 ### Milestone 4 — world integration
