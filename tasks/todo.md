@@ -180,3 +180,32 @@ weather; Glassbox the adaptation and the metric.
       `reference(model)`; `control_authority` -> `cascade.analysis`; tuned controllers out of the loops
 - [x] 9c `py.typed`, 0.2.0, CHANGELOG, project URLs, `slow` marker (`pytest -m "not slow"` ~109 tests)
 - [ ] 9d after Glassbox re-pins: drop the shims in 0.3
+
+## Phase 10: evidence and hygiene (proposed from the 2026-09-02 reviews; see tasks/feedback/)
+- [ ] 10a X8 numbers: re-score the variant grid with selection on disjoint maneuvers (fit 1-8,
+      score 9-17), relabel the README headline (as-published 2.76; 0.68 is tuned), one number
+      everywhere (README, docs/skywalker-x8.md, todo). Needs Glassbox's harness (user's agent).
+- [ ] 10b archetype defects found in review: parts mass sums to 1.06-1.08x (normalise the split);
+      sphere pod inertia (use a slender body); the static downwash fold scales C_mq and elevator
+      power along with the neutral point (document, then fix with a downwash map)
+- [ ] 10c trim channel bounds from the mapped physical limit, not +-1; diagnostic coefficient
+      airspeed floor; vertical mean wind; state the dtype policy and drop load-bearing-looking
+      float32 casts; frozen-field Dryden validity note at hover
+- [ ] 10d doc drift after 0.2: docs/control.md module path; env/baselines.py imports via the vtol
+      shim; cascade.env.gusts export; observation_size(model) and index constants; reset/step
+      return the same buffer end; precompute the actuator pseudo-inverse
+- [ ] 10e reproducibility: config-stamped run record (model hash, version, seed, dtype); scripts
+      that emit every documented table; GPU benchmark script; CITATION.cff; PyPI release
+- [ ] 10f identifiability diagnostics from the existing Jacobians (Cramer-Rao, correlations)
+## Phase 11: sim-to-real tooling (proposed)
+- [ ] action latency and jitter (mirror the observation delay), observation spec with an IMU block
+      and sensor-unit noise, named randomisation spec, failure-injection API, trajectory logging
+      with a versioned schema, ULog-to-canonical loader over Plant, 1-cos gust, shear, density
+      altitude, rotary gust components
+## Phase 12: the thesis harness (proposed, with Glassbox)
+- [ ] frozen two-archetype manifest with hashes and splits; shipped station-record weather set;
+      flight-minutes-to-baseline metric; three baselines incl. a non-adaptive family-trained
+      policy; five-seed variance; reproduction container
+## Phase 13: flight-stack bridge (proposed)
+- [ ] PX4/ArduPlane parameter export with a documented gain mapping; log-fit loop; lockstep HIL
+      over Plant; policy export (jax.export/StableHLO) with an onboard numeric check
