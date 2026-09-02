@@ -313,6 +313,11 @@ class TransitionController(NamedTuple):
     Both guidance laws run every step; their body-rate setpoints and throttles are blended by a
     smooth weight in airspeed centred on ``switch_airspeed_m_s``. Blending in the rate domain
     keeps the attitude handover free of quaternion interpolation and continuous in time.
+
+    ``differential_thrust`` (one entry per propeller) is the throttle increment per unit of the
+    rate loop's body-z command: the yaw control of a twin-motor tailsitter. In hover body z is
+    the belly normal, so this is what holds the wing's plane against a spanwise wind; in
+    forward flight it is the rudder a flying wing does not have.
     """
 
     channels: ChannelMap
@@ -322,6 +327,7 @@ class TransitionController(NamedTuple):
     forward: GuidanceGains
     switch_airspeed_m_s: Array
     switch_width_m_s: Array
+    differential_thrust: Array
 
 
 class TransitionState(NamedTuple):
@@ -410,7 +416,8 @@ def transition_step(
         -controller.channels.limit,
         controller.channels.limit,
     )
-    control = ControlInput(propeller=throttle, channel=channels)
+    propeller = jnp.clip(throttle + command[..., 2:3] * controller.differential_thrust, 0.0, 1.0)
+    control = ControlInput(propeller=propeller, channel=channels)
     next_state = TransitionState(rate=rate_state, hover=hover_state, forward=forward_state)
     return control, next_state, weight
 
@@ -426,17 +433,21 @@ def transition_rollout(
     dt: float,
     *,
     step: StepFunction = rk4_step,
+    environments: Environment | None = None,
 ) -> tuple[tuple[AircraftState, TransitionState], tuple[AircraftState, ControlInput, Array]]:
     """Scan the transition controller and the plant over time-major setpoint sequences.
 
     Returns the final aircraft and controller states and the time-major trajectory of aircraft
-    states, control inputs, and forward-blend weights. Differentiable end to end, so a schedule
-    or a gain can be tuned by gradient through the whole transition.
+    states, control inputs, and forward-blend weights. ``environments`` is an optional
+    time-major ``Environment`` (a gust sequence from ``cascade.gusts``, say) that replaces the
+    constant ``environment`` step by step. Differentiable end to end, so a schedule or a gain
+    can be tuned by gradient through the whole transition.
     """
 
-    def scan_step(carry, setpoints):
+    def scan_step(carry, inputs):
         aircraft, controller_state = carry
-        hover_setpoint, forward_setpoint = setpoints
+        hover_setpoint, forward_setpoint, step_environment = inputs
+        current = environment if step_environment is None else step_environment
         control, next_controller_state, weight = transition_step(
             model,
             controller,
@@ -444,13 +455,15 @@ def transition_rollout(
             hover_setpoint,
             forward_setpoint,
             aircraft,
-            environment,
+            current,
             dt,
         )
-        next_aircraft = step(model, aircraft, control, environment, dt)
+        next_aircraft = step(model, aircraft, control, current, dt)
         return (next_aircraft, next_controller_state), (next_aircraft, control, weight)
 
-    return jax.lax.scan(scan_step, (aircraft_state, state), (hover_setpoints, forward_setpoints))
+    return jax.lax.scan(
+        scan_step, (aircraft_state, state), (hover_setpoints, forward_setpoints, environments)
+    )
 
 
 def tailsitter_reference_controller(spec: AircraftSpec) -> TransitionController:
@@ -464,10 +477,10 @@ def tailsitter_reference_controller(spec: AircraftSpec) -> TransitionController:
     return TransitionController(
         channels=channel_map(spec, roles={"aileron": "roll", "elevator": "-pitch"}, limits=1.0),
         rate=RateGains(
-            kp=jnp.array([0.25, 0.25, 0.0]),
-            ki=jnp.array([0.5, 0.5, 0.0]),
+            kp=jnp.array([0.25, 0.25, 0.15]),
+            ki=jnp.array([0.5, 0.5, 0.15]),
             kd=jnp.array([0.0, 0.0, 0.0]),
-            integral_limit=jnp.array([0.4, 0.4, 0.0]),
+            integral_limit=jnp.array([0.4, 0.4, 0.3]),
             feedforward=jnp.array([0.0, 0.0, 0.0]),
         ),
         attitude=AttitudeGains(
@@ -489,4 +502,5 @@ def tailsitter_reference_controller(spec: AircraftSpec) -> TransitionController:
         ),
         switch_airspeed_m_s=jnp.asarray(6.5),
         switch_width_m_s=jnp.asarray(0.5),
+        differential_thrust=jnp.array([0.5, -0.5]),
     )

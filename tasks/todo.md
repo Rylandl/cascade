@@ -87,6 +87,14 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       7 m/s and the corridor above 3 m/s was a rolled/sideslipping trim family; (4) trim now pulls
       roll and yaw offset toward zero (1e-3) so the symmetric member of the slip family is chosen
       on every platform (this was the ubuntu-only CI failure)
-- [ ] 6e hover-hold integrator gain pass (the hold still drifts 0.15 m against the propwash camber
-      lift before the integral catches it), then a heading change during cruise and a gusty
-      round trip with `cascade.gusts`
+- [x] 6e hover-hold gain pass: kp/ki/kv 4/4/4 halves the standing drift (0.10 m) but costs the
+      round trip (altitude dip 0.68 m, final position error 0.59 m from integrator wind-up through
+      the transition); 2/1/2.5 stays. The drift is the initial transient against the propwash
+      camber lift, not a steady offset.
+- [x] 6f gusty round trip: `transition_rollout(..., environments=)`; found that hover yaw (body z,
+      the belly normal) had no control at all: a 1 m/s spanwise wind tipped the wing over. Added
+      `TransitionController.differential_thrust` (rate-loop z command onto the motors). Gusty
+      round trips (W20 2 and 4 m/s) survive; broadside hover in >= 2 m/s wind drifts because the
+      plate drag is 40% of weight (hover edge-on instead; documented)
+- [ ] 6g heading change during cruise (the forward guidance heading loop under the transition
+      controller), then hover azimuth across the wind as a guidance rule

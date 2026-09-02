@@ -159,3 +159,138 @@ def test_round_trip_returns_to_hover():
     assert np.linalg.norm(position[-1] - np.asarray(hover.position_ned[-1])) < 1.0
     assert np.min(-position[:, 2]) > 0.7 and np.max(-position[:, 2]) < 3.5
     assert float(jnp.max(jnp.abs(controls.channel))) < 0.6
+
+
+def test_environment_sequence_matches_the_constant_path_and_adds_wind():
+    from cascade.state import Environment
+
+    model, environment, controller, state = setup()
+    steps = 200
+    hover = HoverSetpoint(
+        position_ned=jnp.broadcast_to(jnp.array([0.0, 0.0, -1.5]), (steps, 3)),
+        velocity_ned=jnp.zeros((steps, 3)),
+        azimuth_rad=jnp.zeros(steps),
+        tilt_forward_rad=jnp.zeros(steps),
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.full(steps, 8.0),
+        altitude_m=jnp.full(steps, 1.5),
+        heading_rad=jnp.zeros(steps),
+    )
+    constant = Environment(
+        density=jnp.broadcast_to(environment.density, (steps,)),
+        wind=jnp.broadcast_to(environment.wind, (steps, 3)),
+        gravity=jnp.broadcast_to(environment.gravity, (steps, 3)),
+    )
+    run = jax.jit(
+        lambda envs: transition_rollout(
+            model,
+            controller,
+            state,
+            initial_transition_state(state),
+            hover,
+            forward,
+            environment,
+            DT,
+            environments=envs,
+        )
+    )
+
+    (_, _), (plain, _, _) = run(None)
+    (_, _), (sequenced, _, _) = run(constant)
+    assert jnp.allclose(plain.rigid_body.position, sequenced.rigid_body.position, atol=1e-4)
+
+    gust = constant._replace(wind=constant.wind.at[100:, 1].set(1.0))
+    (_, _), (gusty, _, _) = run(gust)
+    assert jnp.allclose(gusty.rigid_body.position[:100], plain.rigid_body.position[:100], atol=1e-4)
+    assert (
+        float(jnp.max(jnp.abs(gusty.rigid_body.position[150:] - plain.rigid_body.position[150:])))
+        > 1e-3
+    )
+
+
+def test_hover_holds_against_a_spanwise_wind_with_differential_thrust():
+    # A spanwise wind weathervanes the wing about its belly normal; only differential thrust
+    # controls that axis in hover, and without it this run falls over within seconds.
+    model, environment, controller, state = setup()
+    steps = 600
+    hover = HoverSetpoint(
+        position_ned=jnp.broadcast_to(jnp.array([0.0, 0.0, -1.5]), (steps, 3)),
+        velocity_ned=jnp.zeros((steps, 3)),
+        azimuth_rad=jnp.zeros(steps),
+        tilt_forward_rad=jnp.zeros(steps),
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.full(steps, 8.0),
+        altitude_m=jnp.full(steps, 1.5),
+        heading_rad=jnp.zeros(steps),
+    )
+    windy = environment._replace(wind=jnp.array([0.0, 1.0, 0.0]))
+
+    (_, _), (trajectory, controls, _) = jax.jit(transition_rollout)(
+        model, controller, state, initial_transition_state(state), hover, forward, windy, DT
+    )
+
+    position = np.asarray(trajectory.rigid_body.position)
+    assert np.all(np.isfinite(position))
+    assert np.max(np.linalg.norm(position - np.array([0.0, 0.0, -1.5]), axis=1)) < 0.6
+    assert tilt_degrees(trajectory).max() < 15.0
+    # The propellers actually split to do it.
+    assert float(jnp.max(jnp.abs(controls.propeller[:, 0] - controls.propeller[:, 1]))) > 0.01
+
+
+def test_round_trip_survives_dryden_gusts():
+    from cascade.gusts import dryden_environment_sequence, dryden_low_altitude
+
+    model, environment, controller, state = setup()
+    steps = 1600
+    speed_command = trapezoid_speed_profile(
+        steps,
+        DT,
+        hold_steps=200,
+        cruise_speed_m_s=jnp.asarray(8.0),
+        acceleration_m_s2=jnp.asarray(3.5),
+        cruise_steps=300,
+        deceleration_m_s2=jnp.asarray(2.0),
+    )
+    hover = speed_profile_schedule(
+        speed_command,
+        DT,
+        start_position_ned=jnp.array([0.0, 0.0, -1.5]),
+        heading_rad=jnp.array(0.0),
+        cruise_speed_m_s=jnp.asarray(8.0),
+    )
+    forward = GuidanceSetpoint(
+        airspeed_m_s=jnp.maximum(speed_command, 6.5),
+        altitude_m=jnp.full(steps, 1.5),
+        heading_rad=jnp.zeros(steps),
+    )
+    gusts = dryden_environment_sequence(
+        jax.random.PRNGKey(1),
+        environment,
+        steps,
+        DT,
+        airspeed_m_s=jnp.asarray(4.0),
+        parameters=dryden_low_altitude(jnp.asarray(1.5), jnp.asarray(2.0)),
+    )
+
+    (_, _), (trajectory, controls, weight) = jax.jit(transition_rollout)(
+        model,
+        controller,
+        state,
+        initial_transition_state(state),
+        hover,
+        forward,
+        environment,
+        DT,
+        environments=gusts,
+    )
+
+    position = np.asarray(trajectory.rigid_body.position)
+    speed = np.linalg.norm(np.asarray(trajectory.rigid_body.velocity), axis=1)
+    assert np.all(np.isfinite(position))
+    assert float(jnp.max(weight)) > 0.8
+    assert speed[-1] < 1.5
+    assert np.min(-position[:, 2]) > 0.4
+    assert np.linalg.norm(position[-1] - np.asarray(hover.position_ned[-1])) < 3.0
+    assert float(jnp.max(jnp.abs(controls.channel))) <= 1.0

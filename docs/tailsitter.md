@@ -70,3 +70,24 @@ lets drag do the braking. `examples/tailsitter_transition.py` flies the round tr
 The elevon never passes 0.4 of its travel. The whole rollout is one differentiable program, so
 the ramp rates, the tilt schedule, or any gain can be tuned by gradient through both
 transitions.
+
+## Wind and gusts
+
+`transition_rollout(..., environments=)` takes a time-major environment, so a Dryden sequence
+from `cascade.gusts` runs through both transitions. Three things the wind cases taught:
+
+- **Hover yaw is differential thrust.** In hover the body z axis is the belly normal, and the
+  elevons have no authority about it. A 1 m/s spanwise wind weathervanes the wing about that
+  axis through the winglets and, with nothing to hold it, tips the thrust axis over within
+  seconds. `TransitionController.differential_thrust` maps the rate loop's body-z command onto
+  the two motors (±0.5 throttle per unit command on the fixture); with it the same wind is held
+  to 0.2 m and the propellers split by a few percent.
+- **Hover edge-on to the wind.** A 0.1 kg wing on 0.075 m² is a very light flat plate: a 2 m/s
+  wind broadside to the wing is 40% of its weight, and leaning into the wind exposes more
+  plate, so with the belly facing a 2 m/s wind the hover drifts downwind at about 1 m/s
+  whatever the tilt limit. With the span into the same wind (belly across it) the hover holds
+  to 0.4 m. Choosing the hover azimuth across the wind is the fixture's wind strategy, as it is
+  for real tailsitters.
+- **Gusts are survivable.** Low-altitude Dryden turbulence for 2 and 4 m/s reference winds
+  (rms 0.4 to 0.75 m/s along track at 1.5 m) leaves the calm-air round trip finite, within its
+  altitude band, and back in a hover within a few metres of the setpoint, without a mean wind.
