@@ -113,8 +113,10 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
 - [x] 6l `TransitionTask` + `transition_policy` baseline (tailsitter hover -> 8 m/s at 100 Hz:
       reaches cruise within 1.5 m/s, reward < 0.6 in the first second, > 0.7 in the last);
       domain-randomisation recipe (vmap over `broadcast_model` batches) with a test
-- [ ] 6m candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
-      flap-moment change (the campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set
-      (corridor, round trip, gusts); a small learned-policy demo on the tracking task (a JAX
-      policy-gradient or gradient-through-dynamics loop) to show the env end to end; sensor
-      models (noisy IMU, delayed observations) for the env
+- [x] 6m `examples/learn_tracking_policy.py`: a 32-unit policy trained by gradient through the
+      dynamics (Adam, clipping) on the 4 s tracking task: trim-hold 144.5, cascade 156.5, learned
+      156.8 of 160 after 60 steps (36 s of training); test asserts one step improves the return
+- [ ] 6n candidates: sensor models (noisy IMU, delayed observations) for the env; Glassbox
+      re-evaluation of the X8 panels model after the post-stall flap-moment change (the campaign
+      reaches alpha 20 deg); a `docs/tailsitter.md` figure set (corridor, round trip, gusts);
+      learn the tailsitter transition (the transition task) by the same loop

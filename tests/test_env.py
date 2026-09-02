@@ -302,3 +302,46 @@ def test_transition_task_baseline_reaches_cruise_from_hover():
     # Hover earns little on a cruise task; cruise earns most of the reward.
     assert float(jnp.mean(rewards[:100])) < 0.6
     assert float(jnp.mean(rewards[-100:])) > 0.7
+
+
+def test_a_gradient_step_through_the_dynamics_improves_a_policy(setup):
+    import importlib.util
+    import pathlib
+
+    from cascade.env import action_size, rollout_policy
+
+    path = pathlib.Path(__file__).parent.parent / "examples" / "learn_tracking_policy.py"
+    spec = importlib.util.spec_from_file_location("learn_tracking_policy", path)
+    learn = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(learn)
+
+    model, config, task, reference = setup
+    trim_action = control_to_action(config, reference.control)
+    params = learn.initial_parameters(
+        jax.random.PRNGKey(0), 17 + model.n_surfaces + model.n_propellers, action_size(model)
+    )
+    # Break the symmetry of the zero output layer so the gradient reaches the first layer too.
+    params["w2"] = 0.01 * jax.random.normal(jax.random.PRNGKey(1), params["w2"].shape)
+    keys = jax.random.split(jax.random.PRNGKey(2), 4)
+
+    def mean_return(params):
+        def policy(policy_state, observation, env_state):
+            return learn.policy_network(params, observation, trim_action), policy_state
+
+        def one(key):
+            state, _ = reset(model, config, task, reference, key)
+            _, (_, _, rewards, _) = rollout_policy(
+                model, config, task, reference, state, policy, None
+            )
+            return jnp.sum(rewards)
+
+        return jnp.mean(jax.vmap(one)(keys))
+
+    value_and_grad = jax.jit(jax.value_and_grad(mean_return))
+    before, gradient = value_and_grad(params)
+    assert all(jnp.all(jnp.isfinite(g)) for g in jax.tree.leaves(gradient))
+    norm = jnp.sqrt(sum(jnp.sum(jnp.square(g)) for g in jax.tree.leaves(gradient)))
+    assert float(norm) > 0.0
+    stepped = jax.tree.map(lambda p, g: p + 1e-3 * g / norm, params, gradient)
+    after, _ = value_and_grad(stepped)
+    assert float(after) > float(before)

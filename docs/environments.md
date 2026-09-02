@@ -97,3 +97,20 @@ On the tailsitter's transition task (hover to 8 m/s at 1.5 m, 100 Hz control, 8 
 `transition_policy` with a 3.5 m/s² velocity ramp reaches cruise within 1.5 m/s, earns under 0.6
 mean reward in the first second of hover and above 0.7 in the last second of cruise. A learned
 policy that beats that curve has learned the transition.
+
+## Learning by gradient through the dynamics
+
+Because an episode is differentiable end to end, a policy can be trained by ascending the
+return with the gradient taken straight through `rollout_policy`, no critic or replay buffer.
+`examples/learn_tracking_policy.py` does that with a 32-unit tanh network initialised at the
+trim action, Adam, and gradient clipping, on the aerobatic reference's 12 m/s tracking task
+from perturbed starts (4 s horizon at 40 Hz, batches of 16 episodes):
+
+| policy | mean return over 256 evaluation episodes (max 160) |
+| --- | ---: |
+| hold the trim action | 144.5 |
+| control cascade baseline (`cascade_policy`) | 156.5 |
+| learned, after 60 gradient steps (36 s after an 18 s compile) | 156.8 |
+
+Sixty steps through the physics match a hand-tuned three-loop cascade. The same loop runs
+unchanged on a batch of randomised models, which is how a robust policy is trained here.
