@@ -67,7 +67,9 @@ class EpisodeConfig:
     by ``channel_scale`` into the aircraft's channel units (1.0 for a normalised spec, about
     0.5 rad for one commanding radians). The reset draws Gaussian perturbations of the trimmed
     reference with the listed standard deviations; the attitude perturbation is a body-frame
-    rotation vector.
+    rotation vector. ``observation_delay_steps`` returns the observation from that many control
+    periods ago (the reset observation until the buffer fills), a latency the policy must live
+    with.
     """
 
     simulation_frequency_hz: float = 400.0
@@ -80,6 +82,7 @@ class EpisodeConfig:
     reset_rate_std_rad_s: float = 0.2
     crash_altitude_m: float = 0.0
     upright_limit_rad: float = 1.4
+    observation_delay_steps: int = 0
     step: StepFunction = rk4_step
 
     def __post_init__(self) -> None:
@@ -90,6 +93,8 @@ class EpisodeConfig:
             )
         if self.horizon_steps <= 0:
             raise ValueError("horizon_steps must be positive")
+        if self.observation_delay_steps < 0:
+            raise ValueError("observation_delay_steps must be non-negative")
 
     @property
     def substeps(self) -> int:
@@ -218,10 +223,78 @@ class Reference(NamedTuple):
     environment: Environment
 
 
+class SensorNoise(NamedTuple):
+    """Per-block observation noise: white noise standard deviations and a per-episode bias
+    standard deviation, drawn once in :func:`reset`. Zeros (the default) give the true state.
+
+    Blocks follow :func:`observation`: air velocity and airspeed as a fraction of the reference
+    speed, alpha and beta in radians, body rates in rad/s, gravity direction (unit vector
+    components), heading error sin and cos, position error as a fraction of 10 m, surface
+    deflections in radians, propeller speed fraction.
+    """
+
+    air_std: Array
+    angle_std: Array
+    rate_std: Array
+    rate_bias_std: Array
+    gravity_std: Array
+    heading_std: Array
+    position_std: Array
+    actuator_std: Array
+
+
+def sensor_noise(
+    *,
+    air_std: float = 0.0,
+    angle_std: float = 0.0,
+    rate_std: float = 0.0,
+    rate_bias_std: float = 0.0,
+    gravity_std: float = 0.0,
+    heading_std: float = 0.0,
+    position_std: float = 0.0,
+    actuator_std: float = 0.0,
+) -> SensorNoise:
+    values = (
+        air_std,
+        angle_std,
+        rate_std,
+        rate_bias_std,
+        gravity_std,
+        heading_std,
+        position_std,
+        actuator_std,
+    )
+    return SensorNoise(*(jnp.asarray(value) for value in values))
+
+
+def _noise_vectors(model: AircraftModel, noise: SensorNoise) -> tuple[Array, Array]:
+    """White-noise and bias standard deviations laid out like the observation."""
+
+    def block(value, size):
+        return jnp.broadcast_to(value, (size,))
+
+    actuators = model.n_surfaces + model.n_propellers
+    white = jnp.concatenate(
+        (
+            block(noise.air_std, 4),
+            block(noise.angle_std, 2),
+            block(noise.rate_std, 3),
+            block(noise.gravity_std, 3),
+            block(noise.heading_std, 2),
+            block(noise.position_std, 3),
+            block(noise.actuator_std, actuators),
+        )
+    )
+    bias = jnp.concatenate((jnp.zeros(6), block(noise.rate_bias_std, 3), jnp.zeros(8 + actuators)))
+    return white, bias
+
+
 class EnvState(NamedTuple):
     aircraft: AircraftState
     step: Array
     key: Array
+    sensor_bias: Array
+    observation_buffer: Array
 
 
 def tracking_task(
@@ -347,13 +420,19 @@ def _quaternion_from_rotvec(rotvec: Array) -> Array:
 def reset(
     model: AircraftModel,
     config: EpisodeConfig,
-    task: TrackingTask,
+    task: Task,
     reference: Reference,
     key: Array,
+    noise: SensorNoise | None = None,
 ) -> tuple[EnvState, Array]:
-    """Draw an initial state around the reference; returns the state and first observation."""
+    """Draw an initial state around the reference; returns the state and first observation.
 
-    key, k_position, k_velocity, k_attitude, k_rate = jax.random.split(key, 5)
+    ``noise`` (default none) adds white sensor noise to every observation and draws a
+    per-episode bias here; the true observation is always available from :func:`observation`.
+    """
+
+    noise = sensor_noise() if noise is None else noise
+    key, k_position, k_velocity, k_attitude, k_rate, k_bias, k_noise = jax.random.split(key, 7)
     rigid = reference.state.rigid_body
     position = rigid.position + config.reset_position_std_m * jax.random.normal(k_position, (3,))
     velocity = rigid.velocity + config.reset_velocity_std_m_s * jax.random.normal(k_velocity, (3,))
@@ -368,8 +447,31 @@ def reset(
     aircraft = equilibrate_internal_state(
         model, perturbed, reference.control, reference.environment
     )
-    state = EnvState(aircraft=aircraft, step=jnp.zeros((), jnp.int32), key=key)
-    return state, observation(model, task, reference, state)
+    white, bias_std = _noise_vectors(model, noise)
+    bias = bias_std * jax.random.normal(k_bias, bias_std.shape)
+    partial = EnvState(
+        aircraft=aircraft,
+        step=jnp.zeros((), jnp.int32),
+        key=key,
+        sensor_bias=bias,
+        observation_buffer=jnp.zeros((config.observation_delay_steps + 1, white.shape[0])),
+    )
+    sensed = _sense(model, task, reference, partial, white, k_noise)
+    buffer = jnp.broadcast_to(sensed, partial.observation_buffer.shape)
+    state = partial._replace(observation_buffer=buffer)
+    return state, buffer[-1]
+
+
+def _sense(
+    model: AircraftModel,
+    task: Task,
+    reference: Reference,
+    state: EnvState,
+    white: Array,
+    key: Array,
+) -> Array:
+    true = observation(model, task, reference, state)
+    return true + state.sensor_bias + white * jax.random.normal(key, true.shape)
 
 
 def reference_speed(task: Task) -> Array:
@@ -460,8 +562,12 @@ def step(
     reference: Reference,
     state: EnvState,
     action: Array,
+    noise: SensorNoise | None = None,
 ) -> tuple[EnvState, Array, Array, Array, dict[str, Array]]:
     """Hold ``action`` for one control period; returns state, observation, reward, done, info.
+
+    The returned observation carries the sensor ``noise`` (white noise drawn from the episode
+    key, plus the bias drawn at reset) and the configured delay.
 
     ``done`` is true on a crash (below ``crash_altitude_m``), on leaving the upright envelope
     (the body down axis more than ``upright_limit_rad`` from gravity), or at the horizon; the
@@ -487,15 +593,15 @@ def step(
     next_step = state.step + 1
     truncated = next_step >= config.horizon_steps
     reward = jnp.where(crashed, 0.0, jnp.exp(-cost))
-    next_state = EnvState(aircraft=aircraft, step=next_step, key=state.key)
+    noise = sensor_noise() if noise is None else noise
+    key, k_noise = jax.random.split(state.key)
+    white, _ = _noise_vectors(model, noise)
+    advanced = state._replace(aircraft=aircraft, step=next_step, key=key)
+    sensed = _sense(model, task, reference, advanced, white, k_noise)
+    buffer = jnp.concatenate((state.observation_buffer[1:], sensed[None]), axis=0)
+    next_state = advanced._replace(observation_buffer=buffer)
     info = {"cost": cost, "crashed": crashed, "truncated": truncated}
-    return (
-        next_state,
-        observation(model, task, reference, next_state),
-        reward,
-        crashed | truncated,
-        info,
-    )
+    return next_state, buffer[0], reward, crashed | truncated, info
 
 
 def rollout_actions(
@@ -505,13 +611,16 @@ def rollout_actions(
     reference: Reference,
     state: EnvState,
     actions: Array,
+    noise: SensorNoise | None = None,
 ) -> tuple[EnvState, tuple[Array, Array, Array]]:
     """Scan a time-major action sequence; returns the final state and (observations, rewards,
     dones). Rewards after the first ``done`` are zeroed, so the sum is the episode return."""
 
     def scan_step(carry, action):
         state, finished = carry
-        next_state, obs, reward, done, _ = step(model, config, task, reference, state, action)
+        next_state, obs, reward, done, _ = step(
+            model, config, task, reference, state, action, noise
+        )
         reward = jnp.where(finished, 0.0, reward)
         return (next_state, finished | done), (obs, reward, done)
 
@@ -527,6 +636,7 @@ def rollout_policy(
     state: EnvState,
     policy,
     policy_state,
+    noise: SensorNoise | None = None,
 ) -> tuple[EnvState, tuple[Array, Array, Array, Array]]:
     """Scan a policy over the horizon; returns the final state and (observations, actions,
     rewards, dones), rewards zeroed after the first ``done``.
@@ -536,12 +646,14 @@ def rollout_policy(
     :func:`cascade_policy` may read the state directly.
     """
 
-    first_observation = observation(model, task, reference, state)
+    first_observation = state.observation_buffer[0]
 
     def scan_step(carry, _):
         state, obs, policy_state, finished = carry
         action, policy_state = policy(policy_state, obs, state)
-        next_state, next_obs, reward, done, _ = step(model, config, task, reference, state, action)
+        next_state, next_obs, reward, done, _ = step(
+            model, config, task, reference, state, action, noise
+        )
         reward = jnp.where(finished, 0.0, reward)
         return (next_state, next_obs, policy_state, finished | done), (obs, action, reward, done)
 

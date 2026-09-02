@@ -345,3 +345,37 @@ def test_a_gradient_step_through_the_dynamics_improves_a_policy(setup):
     stepped = jax.tree.map(lambda p, g: p + 1e-3 * g / norm, params, gradient)
     after, _ = value_and_grad(stepped)
     assert float(after) > float(before)
+
+
+def test_sensor_noise_and_delay(setup):
+    from cascade.env import observation, sensor_noise
+
+    model, config, task, reference = setup
+    key = jax.random.PRNGKey(21)
+    clean_state, clean = reset(model, config, task, reference, key)
+    assert jnp.allclose(clean, observation(model, task, reference, clean_state))
+
+    noise = sensor_noise(rate_std=0.01, rate_bias_std=0.02, air_std=0.02, gravity_std=0.01)
+    noisy_state, noisy = reset(model, config, task, reference, key, noise)
+    # Same physical start, different reading; the bias sits on the rate block only.
+    assert jnp.allclose(
+        noisy_state.aircraft.rigid_body.position, clean_state.aircraft.rigid_body.position
+    )
+    assert not jnp.allclose(noisy, clean)
+    assert jnp.all(noisy_state.sensor_bias[:6] == 0.0)
+    assert jnp.any(noisy_state.sensor_bias[6:9] != 0.0)
+    action = control_to_action(config, reference.control)
+    stepped, reading, _, _, _ = step(model, config, task, reference, noisy_state, action, noise)
+    truth = observation(model, task, reference, stepped)
+    assert jnp.all(jnp.isfinite(reading)) and not jnp.allclose(reading, truth)
+    assert float(jnp.max(jnp.abs(reading - truth))) < 0.2
+
+    delayed_config = EpisodeConfig(horizon_steps=60, observation_delay_steps=2)
+    state, first = reset(model, delayed_config, task, reference, key)
+    state, one, _, _, _ = step(model, delayed_config, task, reference, state, action)
+    state, two, _, _, _ = step(model, delayed_config, task, reference, state, action)
+    state, three, _, _, _ = step(model, delayed_config, task, reference, state, action)
+    # Two periods of latency: the first two readings repeat the reset observation.
+    assert jnp.allclose(one, first) and jnp.allclose(two, first)
+    assert not jnp.allclose(three, first)
+    assert jnp.allclose(three, state.observation_buffer[0])

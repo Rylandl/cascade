@@ -53,6 +53,15 @@ Body-frame, so a policy never sees world position except through the altitude er
 | 17:17+S | surface deflections (rad) |
 | 17+S: | propeller speeds as a fraction of maximum |
 
+## Sensors
+
+`reset` and `step` take an optional `SensorNoise` (`sensor_noise(...)`): white noise per
+observation block (air data, angles, rates, gravity direction, heading, position, actuators)
+plus a rate bias drawn once per episode. `EpisodeConfig.observation_delay_steps` returns the
+reading from that many control periods ago. Both are pure functions of the episode key, so a
+noisy episode is still reproducible and differentiable; the true observation is always
+available from `observation`.
+
 ## Reward and termination
 
 The reward is `exp(-cost)` in `(0, 1]`, with cost the task's weighted sum: for tracking, squared
