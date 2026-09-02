@@ -101,7 +101,9 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       heading (0.15 m). Added `coordinated_turn_rates` feedforward to the rate setpoint (cascade
       and transition): without it the differential-thrust yaw loop fought the turn (0.08 split)
       and the nose dropped 0.9 m. `hover_azimuth_across_wind` gives the edge-on hover azimuth.
-- [ ] 6h next candidates: an end-to-end gradient demo that tunes a transition schedule or gain
-      by gradient (the differentiability claim, exercised); a Gymnasium-style episode wrapper on
-      `Plant` for RL users; Glassbox re-evaluation of the X8 panels model after the post-stall
-      flap-moment change (campaign reaches alpha 20 deg)
+- [x] 6h gradient demo: `examples/tailsitter_tuning.py` tunes acceleration, deceleration, and
+      cruise tilt through the 16 s round trip (0.2 s per value-and-gradient after a 7 s compile;
+      cost 0.40 -> 0.28 in 12 steps); test asserts one descent step improves the cost
+- [ ] 6i candidates: a Gymnasium-style episode wrapper on `Plant` for RL users; Glassbox
+      re-evaluation of the X8 panels model after the post-stall flap-moment change (the campaign
+      reaches alpha 20 deg); a `docs/tailsitter.md` figure set (corridor, round trip, gusts)

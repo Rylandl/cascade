@@ -379,3 +379,26 @@ def test_hover_azimuth_across_wind_puts_the_span_into_the_wind():
     assert batched.shape == (2,)
     gradient = jax.grad(lambda w: hover_azimuth_across_wind(w, jnp.asarray(0.1)))(north_wind)
     assert jnp.all(jnp.isfinite(gradient))
+
+
+def test_a_gradient_step_improves_the_round_trip_schedule():
+    import importlib.util
+    import pathlib
+
+    path = pathlib.Path(__file__).parent.parent / "examples" / "tailsitter_tuning.py"
+    spec = importlib.util.spec_from_file_location("tailsitter_tuning", path)
+    tuning = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tuning)
+
+    model, environment, controller, state = setup()
+    cost = jax.jit(
+        jax.value_and_grad(
+            lambda theta: tuning.round_trip_cost(theta, model, controller, state, environment),
+            has_aux=True,
+        )
+    )
+    theta = jnp.array([3.5, 2.0, 1.0])
+    (before, _), gradient = cost(theta)
+    assert jnp.all(jnp.isfinite(gradient))
+    (after, _), _ = cost(tuning.descent_step(theta, gradient))
+    assert float(after) < float(before)

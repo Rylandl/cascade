@@ -80,6 +80,17 @@ them the differential-thrust yaw loop fought the turn with an 0.08 throttle spli
 dropped 0.9 m. And the hover azimuth at the end is the final heading, so the wing is already
 facing the way the next transition will go.
 
+## Tuning the schedule by gradient
+
+`examples/tailsitter_tuning.py` differentiates a cost over the whole 16 s round trip (mean
+squared altitude error, final position and speed error, elevon effort) with respect to the
+schedule's acceleration, deceleration, and cruise tilt, and takes a dozen bounded gradient
+steps. After a 7 s compile each value-and-gradient of the full flight takes about 0.2 s. The
+gradient's advice is consistent from the first step: accelerate harder (3.5 to 4.0 m/s²), tilt
+more at cruise (1.0 to 1.16 rad), brake a little gentler (2.0 to 1.7 m/s²), and the cost falls
+from 0.40 to 0.28 with the altitude term doing most of it. That is the differentiability claim
+exercised end to end: plant, actuators, stall dynamics, and every loop of the controller.
+
 ## Wind and gusts
 
 `transition_rollout(..., environments=)` takes a time-major environment, so a Dryden sequence
