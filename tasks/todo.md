@@ -104,6 +104,8 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
 - [x] 6h gradient demo: `examples/tailsitter_tuning.py` tunes acceleration, deceleration, and
       cruise tilt through the 16 s round trip (0.2 s per value-and-gradient after a 7 s compile;
       cost 0.40 -> 0.28 in 12 steps); test asserts one descent step improves the cost
-- [ ] 6i candidates: a Gymnasium-style episode wrapper on `Plant` for RL users; Glassbox
-      re-evaluation of the X8 panels model after the post-stall flap-moment change (the campaign
-      reaches alpha 20 deg); a `docs/tailsitter.md` figure set (corridor, round trip, gusts)
+- [x] 6i `cascade.env`: native-JAX episode functions (reset/step/rollout_actions) over a trimmed
+      tracking task, vmap-batched, differentiable through the episode (docs/environments.md)
+- [ ] 6j candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
+      flap-moment change (the campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set
+      (corridor, round trip, gusts); a hover/transition task for `cascade.env` on the tailsitter

@@ -30,7 +30,9 @@ See [the architecture document](docs/architecture.md) for scope, equations, exte
 the roadmap. The [analysis guide](docs/analysis.md) covers trim, post-stall branch continuation,
 coefficient sweeps, and local linearization; [aircraft specifications](docs/aircraft-spec.md)
 documents the versioned TOML format; [the control guide](docs/control.md) covers the rate/attitude/
-guidance cascade, channel-map sign conventions, tuning, and differentiable-tuning examples.
+guidance cascade, channel-map sign conventions, tuning, and differentiable-tuning examples;
+[environments](docs/environments.md) covers the native-JAX episode functions for learning and
+trajectory optimisation.
 
 ## Install
 

@@ -34,6 +34,21 @@ from cascade.control import (
     skywalker_x8_controller,
 )
 from cascade.dynamics import DynamicsResult, derivative, evaluate_dynamics
+from cascade.env import (
+    EnvState,
+    EpisodeConfig,
+    Reference,
+    TrackingTask,
+    action_size,
+    action_to_control,
+    control_to_action,
+    observation,
+    reset,
+    rollout_actions,
+    step,
+    tracking_task,
+    trimmed_reference,
+)
 from cascade.gusts import (
     DrydenParameters,
     dryden_environment_sequence,
@@ -102,6 +117,19 @@ from cascade.vtol import (
 )
 
 __all__ = [
+    "EnvState",
+    "EpisodeConfig",
+    "Reference",
+    "TrackingTask",
+    "action_size",
+    "action_to_control",
+    "control_to_action",
+    "observation",
+    "reset",
+    "rollout_actions",
+    "step",
+    "tracking_task",
+    "trimmed_reference",
     "ActuatorModel",
     "AerodynamicSweep",
     "AircraftModel",
