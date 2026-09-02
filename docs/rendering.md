@@ -17,8 +17,10 @@ outline from its reference span and chord.
 `write_obj(spec, path)` writes the parts as a grouped OBJ mesh for other tools.
 `mjcf_string(spec)` / `write_mjcf(spec, path)` write a MuJoCo model for kinematic playback: a
 free body with the parts as geoms, hinged flaps and propellers as child bodies with joints,
-a ground plane, sky, a directional light, a chase camera and a side camera on the body, and a
-ground camera that tracks it. Gravity is off; Cascade sets the pose. The model also gives MJX
+a grayscale checker ground with a grid line every metre (the tile grows with altitude in
+`render_trajectory`, so a cruise-height view keeps a readable grid), a neutral gradient sky, a
+directional light, a chase camera and a side camera on the body, a world-aligned follow camera,
+and a ground camera that tracks it. Gravity is off; Cascade sets the pose. The model also gives MJX
 users a starting point for comparisons.
 
 ## Rendering

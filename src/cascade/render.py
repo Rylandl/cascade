@@ -110,6 +110,7 @@ def render_trajectory(
     height: int = 540,
     colour_separation: bool = True,
     ground_camera_offset=None,
+    grid_metres: float | None = None,
 ) -> Path:
     """Encode a time-major trajectory (states after each ``dt`` step) to an MP4 at ``fps``.
 
@@ -117,6 +118,7 @@ def render_trajectory(
     ``follow`` (behind and above in world axes, following the position only: right for a
     tailsitter), or ``ground`` (a fixed point beside the flight path that tracks the aircraft;
     ``ground_camera_offset`` places it relative to the path's centroid, in NWU metres).
+    ``grid_metres`` overrides the ground grid spacing chosen from the flight's altitude.
     """
 
     if shutil.which("ffmpeg") is None:
@@ -124,7 +126,12 @@ def render_trajectory(
     steps = int(trajectory.rigid_body.position.shape[0])
     stride = max(int(round(1.0 / (fps * dt))), 1)
     indices = list(range(0, steps, stride))
-    scene = Scene(spec, width=width, height=height)
+    if grid_metres is None:
+        # A grid line every metre reads well near the ground and turns to moire from cruise
+        # height, so the tile grows with the flight's median altitude: 1, 2, 4, or 8 m.
+        altitude = float(np.median(-np.asarray(trajectory.rigid_body.position[indices, 2])))
+        grid_metres = float(2 ** int(np.clip(np.floor(np.log2(max(altitude, 1.0) / 6.0)), 0, 3)))
+    scene = Scene(spec, width=width, height=height, grid_metres=grid_metres)
     if camera == "ground":
         # A fixed point beside the flight path, far enough to keep the whole path in view.
         positions = np.asarray(

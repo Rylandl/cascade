@@ -363,12 +363,17 @@ def _geom_xml(part: Part, name: str) -> str:
 
 
 def mjcf_string(
-    spec: AircraftSpec, *, ground: bool = True, chase_distance: float | None = None
+    spec: AircraftSpec,
+    *,
+    ground: bool = True,
+    chase_distance: float | None = None,
+    grid_metres: float = 1.0,
 ) -> str:
     """MJCF for kinematic playback: a free body with the parts as geoms, hinged flaps and
     propellers as child bodies with joints, a ground plane, sky, lights, a chase camera on
     the body, a world-aligned follow camera, and a ground camera that tracks it. Gravity is
-    off; Cascade drives the pose."""
+    off; Cascade drives the pose. ``grid_metres`` is the ground grid line spacing (a checker
+    tile), 1 m near the ground and larger for a cruise-height view."""
 
     parts = aircraft_parts(spec)
     span = spec.reference_span_m
@@ -385,12 +390,15 @@ def mjcf_string(
         '    <map znear="0.01" zfar="2000"/>',
         "  </visual>",
         "  <asset>",
-        '    <texture type="skybox" builtin="gradient" rgb1="0.62 0.76 0.95" '
-        'rgb2="0.15 0.25 0.5" width="256" height="256"/>',
-        '    <texture name="grid" type="2d" builtin="checker" rgb1="0.52 0.62 0.45" '
-        'rgb2="0.44 0.54 0.38" width="512" height="512"/>',
-        '    <material name="grid" texture="grid" texrepeat="60 60" texuniform="true" '
-        'reflectance="0.05"/>',
+        # The plain MuJoCo look: a grayscale checker with a light grid line every metre (a
+        # texture tile is one metre, the checker halves it) under a neutral gradient sky, so
+        # motion reads from the grid rather than from colour.
+        '    <texture type="skybox" builtin="gradient" rgb1="0.55 0.58 0.62" '
+        'rgb2="0.12 0.13 0.15" width="256" height="256"/>',
+        '    <texture name="grid" type="2d" builtin="checker" rgb1="0.24 0.24 0.25" '
+        'rgb2="0.32 0.32 0.33" mark="edge" markrgb="0.7 0.7 0.72" width="512" height="512"/>',
+        f'    <material name="grid" texture="grid" texrepeat="{1.0 / grid_metres:.6g} '
+        f'{1.0 / grid_metres:.6g}" texuniform="true" reflectance="0.1"/>',
         "  </asset>",
         "  <worldbody>",
         '    <light directional="true" pos="0 0 100" dir="-0.3 0.2 -1" diffuse="0.8 0.8 0.8" '
