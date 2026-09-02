@@ -24,7 +24,8 @@ SEPARATED_RGBA = np.array([0.9, 0.2, 0.15, 1.0])
 
 
 class Scene:
-    """A MuJoCo model of one aircraft, posed from Cascade states."""
+    """A MuJoCo model of one aircraft, posed from Cascade states. Posing needs no display;
+    the renderer (and its OpenGL context) is created on the first frame."""
 
     def __init__(self, spec: AircraftSpec, *, width: int = 960, height: int = 540, **mjcf_kwargs):
         import mujoco
@@ -33,7 +34,8 @@ class Scene:
         self.spec = spec
         self.model = mujoco.MjModel.from_xml_string(mjcf_string(spec, **mjcf_kwargs))
         self.data = mujoco.MjData(self.model)
-        self.renderer = mujoco.Renderer(self.model, height=height, width=width)
+        self.width, self.height = width, height
+        self._renderer = None  # created on the first frame: needs an OpenGL context
         self.parts = aircraft_parts(spec)
         self.surface_geoms: dict[int, list[int]] = {}
         self.flap_joints: dict[int, int] = {}
@@ -50,8 +52,16 @@ class Scene:
                 self.propeller_joints[part.propeller] = int(self.model.jnt_qposadr[joint])
         self.propeller_angle = np.zeros(len(spec.propellers))
 
+    @property
+    def renderer(self):
+        if self._renderer is None:
+            self._renderer = self.mujoco.Renderer(self.model, height=self.height, width=self.width)
+        return self._renderer
+
     def close(self) -> None:
-        self.renderer.close()
+        if self._renderer is not None:
+            self._renderer.close()
+            self._renderer = None
 
     def pose(
         self, state: AircraftState, dt: float = 0.0, *, colour_separation: bool = True

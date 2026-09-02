@@ -1,3 +1,6 @@
+import os
+import sys
+
 import numpy as np
 import pytest
 
@@ -51,6 +54,17 @@ def test_obj_and_mjcf_are_written(tmp_path):
     assert xml.count("<joint") >= 6  # elevons and two propellers
 
 
+def _gl_available() -> bool:
+    """MuJoCo aborts the process (no exception) when it cannot create an OpenGL context, so
+    rendering is attempted only where a context is known to exist."""
+
+    if sys.platform == "darwin":
+        return True
+    if os.environ.get("MUJOCO_GL") in {"egl", "osmesa"}:
+        return True
+    return bool(os.environ.get("DISPLAY"))
+
+
 @pytest.mark.parametrize("name", list(SPECS))
 def test_mjcf_loads_in_mujoco_and_flaps_hinge_trailing_edge_down(name):
     mujoco = pytest.importorskip("mujoco")
@@ -59,16 +73,11 @@ def test_mjcf_loads_in_mujoco_and_flaps_hinge_trailing_edge_down(name):
     spec = SPECS[name]
     model = mujoco.MjModel.from_xml_string(mjcf_string(spec))
     assert model.nq == 7 + model.njnt - 1
+    scene = Scene(spec, width=64, height=48)
     try:
-        scene = Scene(spec, width=64, height=48)
-    except Exception as error:  # no OpenGL context on this machine
-        pytest.skip(f"no renderer: {error}")
-    try:
-        model_ = cascade.load_aircraft_spec if False else None  # noqa: F841
         state = cascade.zero_state(spec.to_model(), altitude=20.0)
         scene.pose(state)
-        frame = scene.frame("chase")
-        assert frame.shape == (48, 64, 3)
+        assert abs(float(scene.data.qpos[2]) - 20.0) < 1e-6  # NWU z up
         if scene.flap_joints:
             surface, address = next(iter(scene.flap_joints.items()))
             part = next(p for p in scene.parts if p.surface == surface and p.hinge is not None)
@@ -81,5 +90,8 @@ def test_mjcf_loads_in_mujoco_and_flaps_hinge_trailing_edge_down(name):
             deflected = scene.data.geom_xpos[geom].copy()
             # Positive deflection is trailing-edge down: the flap centre drops (world z up).
             assert deflected[2] < neutral[2]
+        if _gl_available():
+            frame = scene.frame("chase")
+            assert frame.shape == (48, 64, 3)
     finally:
         scene.close()

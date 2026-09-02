@@ -41,5 +41,7 @@ altitude steps under its auto-tuned cascade. `Scene` is the lower-level object f
 frames: `pose(state, dt)` then `frame(camera)`.
 
 Headless rendering needs an OpenGL context: on macOS the default works from a logged-in
-session; on Linux set `MUJOCO_GL=egl` (GPU) or `osmesa` (software). The rendering tests skip
-when no context is available.
+session; on Linux set `MUJOCO_GL=egl` (GPU) or `osmesa` (software). MuJoCo aborts the
+process rather than raising when it cannot create a context, so `Scene` creates its renderer
+only on the first frame (posing and the MJCF need no display) and the rendering tests attempt
+a frame only on macOS or when `MUJOCO_GL` or `DISPLAY` says a context exists.
