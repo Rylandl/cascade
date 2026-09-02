@@ -20,6 +20,8 @@ vehicle. Its numbers are plausible for a 1S micro airframe.
 
 ## The steady transition corridor
 
+![Trim corridor: thrust-borne and conventional branches](figures/tailsitter_corridor.svg)
+
 `examples/tailsitter_corridor.py` traces the two straight-flight branches with
 `continue_trims`. The conventional branch exists above the fixture's stall speed of about
 7 m/s (alpha 4° at 9 m/s to 9° at 7 m/s). The thrust-borne branch continues from near hover
@@ -45,6 +47,8 @@ flap moment implies (`docs/architecture.md`) removes that barrier: full elevon n
 wing up through 90° alpha at 7 m/s.
 
 ## Hover and transition under closed-loop control
+
+![Round trip in calm air and in gusts](figures/tailsitter_round_trip.svg)
 
 `cascade.vtol` flies the fixture with the loops in `cascade.control`: hover guidance turns a
 position and velocity error into a thrust axis and throttle (with an integral so the wing's
@@ -111,3 +115,5 @@ from `cascade.gusts` runs through both transitions. Three things the wind cases 
 - **Gusts are survivable.** Low-altitude Dryden turbulence for 2 and 4 m/s reference winds
   (rms 0.4 to 0.75 m/s along track at 1.5 m) leaves the calm-air round trip finite, within its
   altitude band, and back in a hover within a few metres of the setpoint, without a mean wind.
+
+The figures come from `scripts/plot_tailsitter.py` (run with `uv run --with matplotlib`).

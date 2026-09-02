@@ -118,9 +118,15 @@ fixed-wing; hover-to-cruise transition is post-stall flight). Assumptions stated
       156.8 of 160 after 60 steps (36 s of training); test asserts one step improves the return
 - [x] 6n `SensorNoise` (white noise per observation block + per-episode rate bias) and
       `observation_delay_steps` in the env, pure in the episode key
-- [ ] 6o candidates: learn the tailsitter transition (the transition task) by the same loop;
-      Glassbox re-evaluation of the X8 panels model after the post-stall flap-moment change (the
-      campaign reaches alpha 20 deg); a `docs/tailsitter.md` figure set (corridor, round trip,
-      gusts)
+- [x] 6o learning the transition by gradient through the dynamics from a hover-initialised
+      policy does not work as is: return 17 -> 28 of 200 in 120 steps against the transition
+      controller's 142; the first gradient norm is 26k (chaotic sensitivity through the stall)
+      and the policy settles in a hover-ish local optimum. Recipe for later: behaviour-clone the
+      transition policy, then fine-tune by gradient; or curriculum on the ramp acceleration
+- [x] 6p figures: `scripts/plot_tailsitter.py` -> docs/figures/{tailsitter_corridor,
+      tailsitter_round_trip}.svg, referenced from docs/tailsitter.md
+- [ ] 6q candidates: Glassbox re-evaluation of the X8 panels model after the post-stall
+      flap-moment change (the campaign reaches alpha 20 deg); imitation + fine-tune transition
+      learning; README figure
 - [x] env throughput in docs/environments.md (M3 CPU: 75k aerobatic / 130k X8 env steps/s at
       batch 1024, ten RK4 sub-steps each)
