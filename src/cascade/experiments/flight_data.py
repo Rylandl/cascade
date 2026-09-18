@@ -14,26 +14,15 @@ from pathlib import Path
 from typing import Any
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 
-from cascade.canonical import (
-    CANONICAL_STATE_SCHEMA,
-    rigid_body_from_canonical,
-    rigid_body_to_canonical,
-)
-from cascade.initialization import (
-    control_from_array,
-    equilibrate_internal_state,
-    standard_environment,
-    zero_state,
-)
-from cascade.integration import rollout
+from cascade.canonical import CANONICAL_STATE_SCHEMA
+from cascade.initialization import standard_environment
 from cascade.provenance import model_hash, spec_hash, stamp
 from cascade.spec import AircraftSpec, load_aircraft_spec, save_aircraft_spec
-from cascade.state import Environment
 
 from .manifest import content_hash, valid_name
+from .replay import prepare_record, replay_record
 
 PACK_SCHEMA = "cascade_flight_pack_v1"
 
@@ -418,38 +407,11 @@ def evaluate_flight_pack(
             nominal_model.n_surfaces,
         ):
             raise ValueError("calibrated model must preserve actuator and surface topology")
-    standard = standard_environment()
     rows = []
     for record_split, record in records:
         if record_split != split:
             continue
-        if record.command.shape[1] != nominal_model.n_propellers + nominal_model.n_control_channels:
-            raise ValueError("record command width differs from aircraft")
-        dt = float(record.time_s[1] - record.time_s[0])
-        step_dt = jnp.asarray(dt / substeps)
-        initial_observation = jnp.asarray(record.canonical_state[0])
-        interval_commands = jnp.asarray(record.command[1:])
-        if not np.isfinite(float(step_dt)) or float(step_dt) <= 0:
-            raise ValueError("record timestep is outside the configured JAX precision")
-        if (
-            not np.isfinite(np.asarray(initial_observation)).all()
-            or not np.isfinite(np.asarray(interval_commands)).all()
-        ):
-            raise ValueError("record state or commands overflow the configured JAX precision")
-        environment = Environment(
-            density=jnp.asarray(record.density_kg_m3[1]),
-            wind=jnp.asarray(record.wind_ned_m_s[1]),
-            gravity=standard.gravity,
-        )
-        environments = Environment(
-            density=jnp.repeat(jnp.asarray(record.density_kg_m3[1:]), substeps, axis=0),
-            wind=jnp.repeat(jnp.asarray(record.wind_ned_m_s[1:]), substeps, axis=0),
-            gravity=jnp.broadcast_to(standard.gravity, ((len(record.time_s) - 1) * substeps, 3)),
-        )
-        if not all(
-            np.isfinite(np.asarray(value)).all() for value in jax.tree.leaves(environments)
-        ) or np.any(np.asarray(environments.density) <= 0):
-            raise ValueError("record environment overflows the configured JAX precision")
+        inputs = prepare_record(record, nominal_model, substeps=substeps)
         observed = record.canonical_state[1:]
         rows.append(
             {
@@ -460,18 +422,7 @@ def evaluate_flight_pack(
             }
         )
         for label, model in models.items():
-            first_control = control_from_array(model, interval_commands[0])
-            state = zero_state(model)._replace(
-                rigid_body=rigid_body_from_canonical(initial_observation)
-            )
-            state = equilibrate_internal_state(model, state, first_control, environment)
-            commands = jnp.repeat(interval_commands, substeps, axis=0)
-            controls = control_from_array(model, commands)
-            _, states = jax.jit(rollout)(
-                model, state, controls, environment, step_dt, environments=environments
-            )
-            states = jax.tree.map(lambda x: x[substeps - 1 :: substeps], states)
-            predicted = np.asarray(rigid_body_to_canonical(states.rigid_body))
+            predicted = np.asarray(jax.jit(replay_record)(model, inputs))
             if not np.isfinite(predicted).all():
                 raise ValueError(f"{label} replay of {record.name} became nonfinite")
             rows.append(
@@ -496,7 +447,7 @@ def evaluate_flight_pack(
         "assumptions": {
             "wind": "recorded NED vectors, interval-end rows; default zero",
             "density_kg_m3": "recorded interval-end values; default 1.225",
-            "gravity_ned_m_s2": np.asarray(standard.gravity).tolist(),
+            "gravity_ned_m_s2": np.asarray(standard_environment().gravity).tolist(),
             "internal_initialization": "equilibrium at first interval command",
             "persistence": "all 13 initial state components held constant",
             "timestamps": "commands[i] end at state/time[i]; row zero unused",

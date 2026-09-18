@@ -55,9 +55,12 @@ trajectory serialization, and installed-package provenance. `--core-only` also p
 MuJoCo is absent. The full test suite remains a separate gate.
 
 Run `examples/high_alpha.py`, `examples/gymnasium_shim.py`, `examples/x8_trim.py`,
-`examples/flight_envelope.py`, `examples/research_workflow.py`, and
-`examples/flight_data_evaluation.py` with the installed wheel's Python and `-I`, from outside
-the checkout. Retain generated reports and replay scores with the test evidence. The Gymnasium
+`examples/flight_envelope.py`, `examples/research_workflow.py`,
+`examples/flight_data_evaluation.py`, and `examples/calibrate_aircraft.py`
+with the installed wheel's Python and `-I`, from outside
+the checkout. Retain generated reports and replay scores with the test evidence. Calibration
+must retain optimizer status, synthetic recovery error and held-out replay results; it does not
+qualify measured-flight accuracy. The Gymnasium
 example should also be exercised with the `gymnasium` extra installed. For the policy export example,
 create a fresh environment and install only the wheel's `export` extra:
 

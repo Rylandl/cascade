@@ -27,7 +27,7 @@ the `export` extra. Neither optional dependency is required to import or use the
 
 The documented names in `cascade.__all__` and the `__all__` lists of `cascade.analysis`,
 `cascade.control`, `cascade.env`, `cascade.design`, `cascade.viz`, `cascade.experiments`,
-and `cascade.learning`
+`cascade.learning`, and `cascade.calibration`
 are public, as is `cascade.integrations.gymnasium.CascadeEnv`. Import optional integrations
 from their explicit module; importing `cascade.integrations` does not import Gymnasium. Underscored
 helpers and unexported implementation details are internal. Specifications and configuration
@@ -43,6 +43,11 @@ models of a population of real aircraft. The new [learning interfaces](learning.
 experimental research APIs with versioned checkpoint/inference schemas. Their reference
 networks use float32. Resume reproducibility requires the same software/backend/precision
 configuration; JAX export compatibility also depends on platform and JAX version.
+
+The [calibration interfaces](calibration.md) are experimental research APIs with a versioned
+artifact schema. Bounded fitting uses the configured JAX precision and does not imply unique
+physical parameters or measured-flight accuracy. Calibrated TOML files use the existing aircraft
+specification schema and can be loaded independently of the fitting report.
 
 The v0.2 compatibility modules (`cascade.vtol`, `autotune`, `weather`, `gusts`, `family`,
 `archetypes`, `geometry`, `render`) and `cascade.env.Reference` remain available in this

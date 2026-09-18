@@ -184,10 +184,18 @@ jobs:
         run: |
           cd "$EVIDENCE_DIR/examples"
           for example in high_alpha gymnasium_shim x8_trim \
-            flight_envelope research_workflow flight_data_evaluation; do
+            flight_envelope research_workflow flight_data_evaluation calibrate_aircraft; do
             "$GITHUB_WORKSPACE/.venv/bin/python" -I "$GITHUB_WORKSPACE/examples/$example.py" \
               2>&1 | tee "$EVIDENCE_DIR/example-$example.log"
           done
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.calibration fit \
+            dist/synthetic-calibration/pack/manifest.json "$EVIDENCE_DIR/cli-calibration" \
+            --config dist/synthetic-calibration/config.json \
+            2>&1 | tee "$EVIDENCE_DIR/calibration-cli-fit.log"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.calibration evaluate \
+            dist/synthetic-calibration/pack/manifest.json "$EVIDENCE_DIR/cli-calibration" \
+            --output "$EVIDENCE_DIR/calibration-cli-evaluation.json" \
+            2>&1 | tee "$EVIDENCE_DIR/calibration-cli-evaluate.log"
       - name: Run the installed-wheel benchmark smoke campaign
         if: matrix.dependencies == 'current'
         run: |

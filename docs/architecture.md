@@ -219,6 +219,9 @@ rendering and hardware adapters         boundary coordinate conversion
 - Versioned, named, unit-explicit aircraft specifications with TOML round-tripping.
 - Whole-aircraft coefficient backend for published models; smooth-spline tables later.
 - Canonical state boundary and a stepped plant for identification tooling.
+- Bounded parameter calibration from frozen fitting recordings, shared differentiable replay,
+  saved aircraft/provenance artifacts and local sensitivity diagnostics. See
+  [aircraft calibration](calibration.md); synthetic recovery does not establish measured-flight accuracy.
 - A published, physically identified reference airframe (Skywalker X8) validated against real
   flight through that boundary in a historical selected-variant replay. Independent held-out
   accuracy is not established by that result; see `docs/validation.md`. The aerobatic fixture

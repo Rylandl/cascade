@@ -123,8 +123,10 @@ result = evaluate_flight_pack(
 Omit `calibrated` and `calibration` to evaluate only nominal and persistence baselines. A supplied
 calibrated specification requires metadata binding that exact specification to the exact pack
 and a nonempty, unique list of fitting-only record names. Channel ordering and surface/propeller
-names and ordering must match the nominal specification. Parameter fitting remains upstream;
-this function does not optimize or select a best model. It checks the declaration but cannot
+names and ordering must match the nominal specification. Use [aircraft calibration](calibration.md)
+to estimate bounded parameters from the fitting split and produce this provenance automatically,
+or supply an externally fitted model. This evaluator does not optimize or select a best model.
+It checks the declaration but cannot
 prove that fitting avoided evaluation data. A previously inspected evaluation set does not
 become a blind holdout by repacking it.
 
@@ -154,6 +156,10 @@ fitting/evaluation splits, and compares the nominal specification with that know
 It declares the comparison as **known synthetic generator, not fitted**. Its assertions show that
 the replay pipeline recovers simulated motion more closely with the generating model; they do
 not demonstrate calibration performance or measured-flight predictive accuracy.
+
+For an actual fitting demonstration on synthetic data, run
+`python examples/calibrate_aircraft.py --output dist/synthetic-calibration`. That example
+estimates mass and inertia from fitting maneuvers before scoring separate recordings.
 
 `tests/test_flight_data.py` also verifies replay with nonzero, changing wind and density, CSV
 round trips, tamper detection, split guards and rejected calibration provenance.

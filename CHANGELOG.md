@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased: sensor-aware policy learning
+## Unreleased: policy learning and aircraft calibration
+
+- Add bounded aircraft calibration from frozen fitting recordings, using shared differentiable
+  open-loop replay, explicit physical residual scales and JAX Jacobians.
+- Add named parameter declarations, validated calibrated aircraft specifications, local
+  sensitivity/bound diagnostics and versioned calibration artifacts bound to the exact pack.
+- Add a fit/evaluate CLI and a synthetic mass/inertia recovery example. Held-out replay preserves
+  optimizer outcomes and does not participate in parameter fitting or model selection.
 
 - Add `cascade.learning` with sensor-aware feedforward and recurrent reference policies,
   configurable differentiable training, finite-update checks and explicit optimizer/RNG state.
