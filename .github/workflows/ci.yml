@@ -42,8 +42,13 @@ jobs:
           import os
           from pathlib import Path
           root = Path("release-artifacts")
-          files = sorted((root / "dist").iterdir())
-          assert len(files) == 2
+          wheel, = (root / "dist").glob("*.whl")
+          sdist, = (root / "dist").glob("*.tar.gz")
+          files = sorted([wheel, sdist])
+          entries = {p for p in (root / "dist").iterdir()
+                     if not (p.name == ".gitignore" and p.is_file())}
+          if entries != set(files) or not all(p.is_file() for p in files):
+              raise SystemExit("build requires exactly one wheel and one source distribution")
           (root / "SHA256SUMS").write_text("".join(
               f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n"
               for p in files

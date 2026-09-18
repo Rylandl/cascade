@@ -53,7 +53,10 @@ jobs:
           from pathlib import Path
           wheel, = Path("dist").glob("*.whl")
           sdist, = Path("dist").glob("*.tar.gz")
-          if len(list(Path("dist").iterdir())) != 2:
+          files = {wheel, sdist}
+          entries = {p for p in Path("dist").iterdir()
+                     if not (p.name == ".gitignore" and p.is_file())}
+          if entries != files or not all(p.is_file() for p in files):
               raise SystemExit("publication requires exactly one wheel and one source distribution")
           with zipfile.ZipFile(wheel) as archive:
               name, = (n for n in archive.namelist() if n.endswith(".dist-info/METADATA"))
