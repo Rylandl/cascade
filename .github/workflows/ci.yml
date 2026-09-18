@@ -223,7 +223,7 @@ jobs:
             --architecture recurrent --task scheduled --steps 2 --seeds 0 --horizon 8 \
             --hidden-size 4 --batch-size 2 --evaluation-episodes 1 \
             2>&1 | tee "$EVIDENCE_DIR/recurrent-learning.log"
-          "$target/bin/python" -I "$GITHUB_WORKSPACE/examples/export_policy.py" \
+          JAX_ENABLE_X64=1 "$target/bin/python" -I "$GITHUB_WORKSPACE/examples/export_policy.py" \
             "$EVIDENCE_DIR/recurrent-learning/seed-0/checkpoint.npz" \
             "$EVIDENCE_DIR/cascade-policy.cascade-policy" 2>&1 | tee "$EVIDENCE_DIR/export.log"
           test -s "$EVIDENCE_DIR/cascade-policy.cascade-policy"

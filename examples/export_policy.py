@@ -31,9 +31,11 @@ def main():
     exported_memory = exported.initial_memory()
     largest_error = 0.0
     for index in range(8):
-        values = jax.random.normal(jax.random.PRNGKey(index), (config.observation_size,))
+        values = jax.random.normal(
+            jax.random.PRNGKey(index), (config.observation_size,), dtype=jnp.float32
+        )
         valid = jnp.arange(config.observation_size) % 3 != index % 3
-        age = jnp.where(valid, index * 0.025, jnp.inf)
+        age = jnp.where(valid, jnp.float32(index * 0.025), jnp.float32(jnp.inf))
         reading = SensorObservation(values, age, valid)
         expected, memory = policy_step(
             checkpoint.state.parameters, memory, reading, config, checkpoint.trim_action
