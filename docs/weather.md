@@ -21,8 +21,8 @@ A discrete one-minus-cosine gust, the certification-standard shape, is one timed
 condition: `gust_amplitude_m_s`, `gust_start_s`, `gust_duration_s`, and `gust_direction_ned` (an
 updraft by default); `discrete_gust_ned(condition, time)` evaluates it and the environment adds
 it to the wind every period. `isa_density(altitude)` is the standard-atmosphere density, used
-by the environment when `EpisodeConfig.isa_density` is set so a hot-and-high or a 3000 m sortie
-flies in thinner air.
+by the environment when `EpisodeConfig.isa_density` is set so a 3000 m sortie flies in thinner
+air. This models altitude-dependent standard atmosphere, without temperature anomalies.
 
 `weather_classes()` returns calm, light (7.7 m/s at 20 ft), moderate (15.4), and severe (23.2)
 conditions with a matching mean wind from the north.
@@ -65,6 +65,7 @@ period from the episode key. The observation's air data, the task's airspeed cos
 baseline controllers all see the current wind. Without a condition the reference's own wind
 holds and nothing changes.
 
-Under the cascade baseline on the aerobatic reference, a 6 m/s crosswind with moderate
-turbulence (12 m/s turbulence wind) over a 4 s episode leaves the altitude within 5 m and the
-mean reward above 0.5 once settled.
+The seeded regression in `tests/test_env.py` exercises the cascade baseline on the aerobatic
+fixture with a 6 m/s crosswind and 12 m/s turbulence wind over a 4 s episode. It checks final
+altitude error below 5 m and mean reward above 0.5 over the last second. This is a specific
+simulator regression case, not a general wind envelope or real-flight result.

@@ -24,12 +24,28 @@ from cascade.model import AircraftModel
 from cascade.spec import AircraftSpec
 
 STAMP_SCHEMA = "cascade_stamp_v1"
+_RESERVED_FIELDS = {
+    "schema",
+    "timestamp_utc",
+    "cascade_version",
+    "git_commit",
+    "jax_version",
+    "jaxlib_version",
+    "backend",
+    "platform",
+    "python",
+    "x64_enabled",
+    "seed",
+    "spec_name",
+    "spec_hash",
+    "model_hash",
+}
 
 
 def spec_hash(spec: AircraftSpec) -> str:
     """SHA-256 of the specification's canonical JSON (sorted keys, no whitespace)."""
 
-    payload = json.dumps(spec.to_dict(), sort_keys=True, separators=(",", ":"))
+    payload = json.dumps(spec.to_dict(), sort_keys=True, separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -46,12 +62,22 @@ def model_hash(model: AircraftModel) -> str:
 
 
 def git_commit() -> str | None:
-    """The source tree's commit, when running from a checkout; ``None`` otherwise."""
+    """The source checkout's HEAD, or ``None`` for an installed distribution.
+
+    Only a checkout containing this module under ``src/cascade`` is eligible. In
+    particular, a virtual environment inside another repository must not inherit
+    that repository's commit. HEAD identifies the base commit, not uncommitted edits.
+    """
 
     try:
-        root = Path(__file__).resolve().parents[2]
+        module_path = Path(__file__).resolve()
+        root = module_path.parents[2]
+        if module_path != root / "src" / "cascade" / "provenance.py":
+            return None
+        if not (root / ".git").exists():
+            return None
         result = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel", "HEAD"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -59,7 +85,10 @@ def git_commit() -> str | None:
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    return result.stdout.strip() if result.returncode == 0 and result.stdout.strip() else None
+    lines = result.stdout.strip().splitlines()
+    if result.returncode != 0 or len(lines) != 2 or Path(lines[0]).resolve() != root:
+        return None
+    return lines[1]
 
 
 def stamp(
@@ -69,8 +98,18 @@ def stamp(
     seed: int | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
-    """Everything needed to reproduce a result, as a JSON-ready dict."""
+    """Record environment and model identifiers as a JSON-ready dict.
 
+    Custom fields may add experiment context but cannot overwrite reserved fields,
+    including optional model/specification hashes even when those inputs are absent.
+    Values must be JSON serializable and numeric values must be finite. A stamp does
+    not bundle the model, inputs, external datasets, or uncommitted source changes;
+    those must be preserved separately to reproduce an experiment.
+    """
+
+    reserved = _RESERVED_FIELDS.intersection(extra)
+    if reserved:
+        raise ValueError(f"reserved provenance fields: {', '.join(sorted(reserved))}")
     try:
         version = metadata.version("cascade-flight")
     except metadata.PackageNotFoundError:
@@ -94,6 +133,7 @@ def stamp(
     if model is not None:
         record["model_hash"] = model_hash(model)
     record.update(extra)
+    json.dumps(record, allow_nan=False)
     return record
 
 
@@ -109,7 +149,7 @@ def write_stamp(path: str | Path, *args: Any, **kwargs: Any) -> dict[str, Any]:
     """Write :func:`stamp` as JSON next to a result and return it."""
 
     record = stamp(*args, **kwargs)
-    Path(path).write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    Path(path).write_text(json.dumps(record, indent=2, sort_keys=True, allow_nan=False) + "\n")
     return record
 
 

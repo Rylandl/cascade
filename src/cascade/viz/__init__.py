@@ -3,8 +3,9 @@ See ``docs/rendering.md``."""
 
 from cascade.viz.geometry import *  # noqa: F403
 from cascade.viz.geometry import __all__ as _geometry_all
+from cascade.viz.inspector import trajectory_report
 
-__all__ = [*_geometry_all, "Scene", "render_trajectory"]  # noqa: F405
+__all__ = [*_geometry_all, "Scene", "render_trajectory", "trajectory_report"]  # noqa: F405
 
 
 def __getattr__(name):

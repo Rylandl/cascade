@@ -6,16 +6,22 @@ spanning the trailing edge, tip winglets. It is a software fixture built to exer
 Cascade exists for, hover-to-cruise transition through post-stall flight, not an identified
 vehicle. Its numbers are plausible for a 1S micro airframe.
 
+The corridor and calm-air tables below were reproduced with Python 3.13.11, JAX 0.11.1,
+float32, and the CPU backend on macOS arm64. Run `python examples/tailsitter_corridor.py`,
+`python examples/tailsitter_transition.py`, and `python examples/tailsitter_tuning.py` to
+reproduce them. These checks concern this fixed simulated fixture; they do not establish
+hardware flight performance. See [validation status](validation.md).
+
 ## What makes it a tailsitter in the model
 
 - Each propeller's wake is mapped onto its own inboard wing panel (far-wake weight 1.8) and
   grazes its winglet; the outboard panels are clean. A 0.1 m propeller washes about 40% of a
-  0.25 m half-span, and applying the wake to the whole half would let propwash lift carry most
-  of the weight and trim the near-hover state at only 44° of pitch.
+  0.25 m half-span. Wake coverage is a modeling choice with a strong effect on hover loads.
 - The elevons are flaps on every wing panel, so in hover the washed inboard panels give pitch
   and roll authority at zero airspeed: about half deflection yields several rad/s² about both
   axes from propwash alone.
-- Differential thrust yaws in body axes; the counter-rotating pair leaves no net reaction torque.
+- Differential thrust yaws in body axes; the symmetric counter-rotating pair cancels reaction
+  torque when the shaft speeds are equal.
 - Hover needs about 78% throttle; full throttle gives a thrust-to-weight ratio of 1.6.
 
 ## The steady transition corridor
@@ -23,9 +29,11 @@ vehicle. Its numbers are plausible for a 1S micro airframe.
 ![Trim corridor: thrust-borne and conventional branches](figures/tailsitter_corridor.svg)
 
 `examples/tailsitter_corridor.py` traces the two straight-flight branches with
-`continue_trims`. The conventional branch exists above the fixture's stall speed of about
-7 m/s (alpha 4° at 9 m/s to 9° at 7 m/s). The thrust-borne branch continues from near hover
-all the way up through cruise as a pure pitch branch, with no roll or sideslip:
+`continue_trims`. With its fixed seed and speed grid, conventional trims pass at 7, 8, and
+9 m/s (alpha 9.2°, 5.8°, and 4.3°); the 6 and 6.5 m/s candidates fail the balance check.
+That search does not establish an exact stall boundary or exclude other equilibria. The
+thrust-borne branch continues through the following near-hover to cruise points, with roll
+and sideslip close to zero:
 
 | airspeed m/s | 0.5 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -33,18 +41,16 @@ all the way up through cruise as a pure pitch branch, with no roll or sideslip:
 | throttle | 0.78 | 0.76 | 0.73 | 0.77 | 0.78 | 0.79 | 0.81 | 0.83 | 0.85 |
 | elevator (normalized) | −0.05 | −0.10 | −0.18 | −0.26 | −0.30 | −0.29 | −0.26 | −0.24 | −0.20 |
 
-Two features matter for a transition controller. The branches coexist above 7 m/s with very
+Two features matter for a transition controller. The sampled branches coexist at 7–8 m/s with very
 different incidence, so a transition is a change of branch, not a slide along one. And between
 3 and 5 m/s the thrust-borne branch needs the most nose-up elevon: that is the
 control-authority pinch where the wings are fully separated and the propwash over the inboard
 elevons carries the pitch authority.
 
-The pinch is where the model's post-stall flap moment matters. With the separated flap load
-lumped at the panel quarter chord (no moment arm) the branch above 3 m/s only balanced by
-rolling to 28° and sideslipping 26°, and full nose-up elevon could not hold alpha beyond 30° at
-7 m/s, so no back-transition was flyable. Giving the separated flap load the arm the attached
-flap moment implies (`docs/architecture.md`) removes that barrier: full elevon now pitches the
-wing up through 90° alpha at 7 m/s.
+The post-stall flap load has a moment arm inferred from the attached flap lift and moment
+coefficients ([architecture](architecture.md)). This supplies pitch authority after separation.
+The corridor checks exercise that implementation but do not independently validate its
+post-stall force or moment law.
 
 ## Hover and transition under closed-loop control
 
@@ -71,49 +77,40 @@ lets drag do the braking. `examples/tailsitter_transition.py` flies the round tr
 | throttle | 0.80 | 0.88 | 0.84 | 0.62 | 0.62 | 0.48 | 0.72 | 0.74 | 0.80 | 0.81 | 0.80 |
 | altitude m | 1.34 | 1.67 | 2.69 | 2.65 | 1.92 | 1.81 | 1.37 | 1.11 | 1.02 | 1.11 | 1.50 |
 
-The elevon never passes 0.4 of its travel. The whole rollout is one differentiable program, so
-the ramp rates, the tilt schedule, or any gain can be tuned by gradient through both
-transitions.
+The example also differentiates final position error through the round trip; the recorded
+derivative with respect to deceleration is approximately −0.0301. The schedule and controller
+can be optimized through the rollout, subject to the model and numerical limitations.
 
-A heading profile in the same schedule turns the aircraft in cruise: a 90° ramp over 3 s is
-tracked with about a second of lag at 20° of bank, holds altitude within 0.3 m through the
-turn, and the back-transition then lands a hover facing the new heading within 0.15 m of the
-setpoint. Two details make that clean. The forward rate setpoint carries the coordinated-turn
-pitch and yaw rates for the commanded bank (`cascade.control.coordinated_turn_rates`); without
-them the differential-thrust yaw loop fought the turn with an 0.08 throttle split and the nose
-dropped 0.9 m. And the hover azimuth at the end is the final heading, so the wing is already
-facing the way the next transition will go.
+`tests/test_transition.py` also exercises a 90° heading ramp during cruise and return to
+hover. The forward rate setpoint includes coordinated-turn pitch and yaw rates for the
+commanded bank (`cascade.control.coordinated_turn_rates`), and the final hover azimuth follows
+the commanded heading. The test checks a track error below 5° at the end of cruise and a final
+hover position error below 1 m; those are fixture-specific regression thresholds.
 
 ## Tuning the schedule by gradient
 
 `examples/tailsitter_tuning.py` differentiates a cost over the whole 16 s round trip (mean
 squared altitude error, final position and speed error, elevon effort) with respect to the
 schedule's acceleration, deceleration, and cruise tilt, and takes a dozen bounded gradient
-steps. After a 7 s compile each value-and-gradient of the full flight takes about 0.2 s. The
-gradient's advice is consistent from the first step: accelerate harder (3.5 to 4.0 m/s²), tilt
-more at cruise (1.0 to 1.16 rad), brake a little gentler (2.0 to 1.7 m/s²), and the cost falls
-from 0.40 to 0.28 with the altitude term doing most of it. That is the differentiability claim
-exercised end to end: plant, actuators, stall dynamics, and every loop of the controller.
+steps. In the recorded run, cost falls from 0.404 at the initial evaluated schedule
+`[3.50, 2.00, 1.00]` to 0.284 at iteration 11's evaluated schedule `[4.04, 1.67, 1.16]`
+(acceleration in m/s², deceleration in m/s², tilt in radians). The final printed schedule
+includes one more update and is not evaluated in the loop. The altitude term contributes
+most of the improvement. This demonstrates differentiation through this plant/controller
+example; it does not establish a global optimum or a portable runtime benchmark.
 
 ## Wind and gusts
 
-`transition_rollout(..., environments=)` takes a time-major environment, so a Dryden sequence
-from `cascade.env.gusts` runs through both transitions. Three things the wind cases taught:
+`transition_rollout(..., environments=)` takes a time-major environment, allowing Dryden
+histories from `cascade.env.gusts` to run through both transitions. The fixture maps body-z
+rate commands to differential thrust and offers `hover_azimuth_across_wind` to orient the
+wing relative to the wind. These are model/control strategies, not verified operating limits
+for a physical tailsitter.
 
-- **Hover yaw is differential thrust.** In hover the body z axis is the belly normal, and the
-  elevons have no authority about it. A 1 m/s spanwise wind weathervanes the wing about that
-  axis through the winglets and, with nothing to hold it, tips the thrust axis over within
-  seconds. `TransitionController.differential_thrust` maps the rate loop's body-z command onto
-  the two motors (±0.5 throttle per unit command on the fixture); with it the same wind is held
-  to 0.2 m and the propellers split by a few percent.
-- **Hover edge-on to the wind.** A 0.1 kg wing on 0.075 m² is a very light flat plate: a 2 m/s
-  wind broadside to the wing is 40% of its weight, and leaning into the wind exposes more
-  plate, so with the belly facing a 2 m/s wind the hover drifts downwind at about 1 m/s
-  whatever the tilt limit. With the span into the same wind (belly across it) the hover holds
-  to 0.4 m. Choosing the hover azimuth across the wind is the fixture's wind strategy, as it is
-  for real tailsitters.
-- **Gusts are survivable.** Low-altitude Dryden turbulence for 2 and 4 m/s reference winds
-  (rms 0.4 to 0.75 m/s along track at 1.5 m) leaves the calm-air round trip finite, within its
-  altitude band, and back in a hover within a few metres of the setpoint, without a mean wind.
+The fixed cases in `tests/test_transition.py` include a 1 m/s spanwise wind and a seeded
+Dryden round trip. They check finite motion, bounded position/altitude errors, and return to
+low speed. Passing those cases does not characterize success probability across turbulence
+realizations or establish a maximum safe wind speed.
 
-The figures come from `scripts/plot_tailsitter.py` (run with `uv run --with matplotlib`).
+The stored figures are illustrations generated by `scripts/plot_tailsitter.py`
+(`uv run --with matplotlib python scripts/plot_tailsitter.py`); they are not flight measurements.

@@ -37,6 +37,12 @@ seeded appropriately. That demonstrates that the numerical architecture can repr
 flight. It is not evidence that the forces, control margins, or stability of a real airframe match
 the fixture.
 
+`python examples/trim_envelope.py` reproduces this example. The recorded CPU/float32 check with
+Python 3.13.11 and JAX 0.11.1 found the seeded branch at 72.3°, 64.4°, 57.1°, 50.8°, and 45.4°
+for 4–8 m/s, respectively, and 145 finite points in the −180° to 180° coefficient sweep.
+Those are numerical fixture checks; finite forces and successful trim do not establish
+experimental validity. See [validation status](validation.md).
+
 ## Aerodynamic sweeps
 
 `aerodynamic_sweep` broadcasts angle of attack, sideslip, and airspeed into a single vectorized
@@ -65,11 +71,18 @@ and broadcast over worlds, so every world in a batch can see its own gust histor
 import jax
 from cascade.env.gusts import dryden_environment_sequence, dryden_low_altitude
 
+environment = cascade.standard_environment()
+state = trim.state
+controls = jax.tree.map(
+    lambda value: jax.numpy.broadcast_to(value, (400, *value.shape)), trim.control
+)
 parameters = dryden_low_altitude(altitude_m=50.0, wind_20ft_m_s=15.4)
 environments = dryden_environment_sequence(
     jax.random.key(0), environment, steps=400, dt=0.01, airspeed_m_s=18.0, parameters=parameters
 )
-final, trajectory = cascade.rollout(model, state, controls, environment, 0.01, environments=environments)
+final, trajectory = cascade.rollout(
+    model, state, controls, environment, 0.01, environments=environments
+)
 ```
 
 Gusts are frozen-field wind histories, not a gust state coupled to the aircraft; a moving-air

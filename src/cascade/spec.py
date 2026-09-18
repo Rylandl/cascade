@@ -150,10 +150,12 @@ class LateralCoefficientSpec:
 
 @dataclass(frozen=True, slots=True)
 class BodySpec:
-    """Whole-aircraft coefficient table about the center of mass, in the published convention.
+    """Whole-aircraft coefficient table in the published convention.
 
     ``deflection_map`` has one row per generalized control (aileron, elevator, rudder) and one
     column per surface, forming those angles from the physical surface deflections.
+    ``reference_position_m`` is the coefficient reference relative to the center of mass in
+    body axes; zero retains the original convention of coefficients about the center of mass.
     """
 
     lift: LongitudinalCoefficientSpec
@@ -167,6 +169,7 @@ class BodySpec:
     normal_force_coefficient: float
     pitch_flat_plate: float
     deflection_map: tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]
+    reference_position_m: tuple[float, float, float] = (0.0, 0.0, 0.0)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:
@@ -185,6 +188,11 @@ class BodySpec:
             normal_force_coefficient=float(data["normal_force_coefficient"]),
             pitch_flat_plate=float(data["pitch_flat_plate"]),
             deflection_map=rows,
+            reference_position_m=_vector(
+                data.get("reference_position_m", (0.0, 0.0, 0.0)),
+                3,
+                "body.reference_position_m",
+            ),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -200,6 +208,7 @@ class BodySpec:
             "normal_force_coefficient": self.normal_force_coefficient,
             "pitch_flat_plate": self.pitch_flat_plate,
             "deflection_map": _lists(self.deflection_map),
+            "reference_position_m": _lists(self.reference_position_m),
         }
 
     def to_model(self) -> BodyModel:
@@ -223,6 +232,7 @@ class BodySpec:
             normal_force_coefficient=jnp.asarray(self.normal_force_coefficient),
             pitch_flat_plate=jnp.asarray(self.pitch_flat_plate),
             deflection_map=jnp.asarray(self.deflection_map),
+            reference_position=jnp.asarray(self.reference_position_m),
         )
 
 

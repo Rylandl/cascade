@@ -6,8 +6,9 @@ dynamics stay untouched and everything remains jit-able, batchable, and differen
 - a **jam** freezes a surface where it is (its time constant becomes effectively infinite);
 - a **hardover** drives a surface to a physical limit and holds it there (its command row is
   zeroed and its bias set to the limit, so the actuator itself moves it at its own rate);
-- a **motor-out** takes a propeller's speed range to zero (it spins down at its time constant);
-- **partial power** scales a propeller's maximum speed.
+- a **motor-out** takes a propeller's target speed range to zero (it spins down through its
+  time constant and acceleration limit);
+- **partial power** scales a propeller's maximum target speed, with the same motor dynamics.
 
 :func:`apply_faults` returns the faulted model for a given time; :func:`cascade.env.step`
 applies it every control period when a schedule is given, and a batch of schedules is a batch
@@ -16,6 +17,8 @@ of failure cases.
 
 from __future__ import annotations
 
+import math
+from numbers import Integral, Real
 from typing import NamedTuple
 
 import jax.numpy as jnp
@@ -59,28 +62,53 @@ def fault_schedule(
     partial_power: dict[int, tuple[float, float]] | None = None,
 ) -> FaultSchedule:
     """Build a schedule from indices: ``jams={surface: time}``, ``hardovers={surface: (time,
-    sign)}``, ``motor_out={propeller: time}``, ``partial_power={propeller: (time, fraction)}``."""
+    sign)}``, ``motor_out={propeller: time}``, ``partial_power={propeller: (time, fraction)}``.
+
+    Indices must address an existing actuator, times must be nonnegative (infinity means
+    never), hardover signs must be -1 or +1, and target-speed fractions must lie in [0, 1].
+    This host-side constructor validates inputs before building the traceable schedule.
+    """
 
     schedule = no_faults(model)
     for surface, time in (jams or {}).items():
+        _validate_fault(surface, time, model.n_surfaces, "surface")
         schedule = schedule._replace(
             surface_jam_time_s=schedule.surface_jam_time_s.at[surface].set(time)
         )
     for surface, (time, sign) in (hardovers or {}).items():
+        _validate_fault(surface, time, model.n_surfaces, "surface")
+        if isinstance(sign, bool) or not isinstance(sign, Real) or sign not in (-1, 1):
+            raise ValueError("hardover sign must be -1 or +1")
         schedule = schedule._replace(
             surface_hardover_time_s=schedule.surface_hardover_time_s.at[surface].set(time),
             surface_hardover_sign=schedule.surface_hardover_sign.at[surface].set(sign),
         )
     for propeller, time in (motor_out or {}).items():
+        _validate_fault(propeller, time, model.n_propellers, "propeller")
         schedule = schedule._replace(
             propeller_failure_time_s=schedule.propeller_failure_time_s.at[propeller].set(time)
         )
     for propeller, (time, fraction) in (partial_power or {}).items():
+        _validate_fault(propeller, time, model.n_propellers, "propeller")
+        if (
+            isinstance(fraction, bool)
+            or not isinstance(fraction, Real)
+            or not math.isfinite(fraction)
+            or not 0.0 <= fraction <= 1.0
+        ):
+            raise ValueError("partial-power target-speed fraction must be finite and in [0, 1]")
         schedule = schedule._replace(
             propeller_power_time_s=schedule.propeller_power_time_s.at[propeller].set(time),
             propeller_power_fraction=schedule.propeller_power_fraction.at[propeller].set(fraction),
         )
     return schedule
+
+
+def _validate_fault(index: int, time: float, count: int, kind: str) -> None:
+    if isinstance(index, bool) or not isinstance(index, Integral) or not 0 <= index < count:
+        raise ValueError(f"{kind} index must be an integer in [0, {count})")
+    if isinstance(time, bool) or not isinstance(time, Real) or math.isnan(time) or time < 0.0:
+        raise ValueError("fault time must be nonnegative; use infinity for never")
 
 
 def apply_faults(model: AircraftModel, schedule: FaultSchedule, time_s: Array) -> AircraftModel:

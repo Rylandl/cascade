@@ -7,7 +7,7 @@ hover and transition), so the episode functions never branch on task type.
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import NamedTuple, Protocol, runtime_checkable
 
 import jax.numpy as jnp
 from jax import Array
@@ -172,7 +172,22 @@ class TransitionTask(NamedTuple):
         )
 
 
-Task = TrackingTask | HoverTask | TransitionTask
+@runtime_checkable
+class Task(Protocol):
+    """Common episode-task interface, including static tasks and time-varying missions.
+
+    A mission resolves through ``at(time_s, rigid)``; a static task is already its own
+    target. The resolved target supplies ``cost``, ``heading_error`` and ``position_error``.
+    This structural protocol describes the construction/speed interface shared by both,
+    without a circular dependency on the mission implementations. Runtime membership checks
+    only verify method presence, not numerical validity or a resolved target's contract.
+    """
+
+    def reference(
+        self, model: AircraftModel, environment: Environment | None = None
+    ) -> ReferenceFlight: ...
+
+    def reference_speed(self) -> Array: ...
 
 
 class ReferenceFlight(NamedTuple):
@@ -302,6 +317,19 @@ def reference_speed(task: Task) -> Array:
     """Speed that normalises velocity observations: the task's own reference speed."""
 
     return task.reference_speed()
+
+
+def task_at(task, time_s: Array, rigid=None):
+    """Resolve a mission at the sample's time and state, or preserve a static task.
+
+    Mission objects implement ``at(time_s, rigid)`` and return the same cost/error interface
+    as a static task. Resolution is a pure JAX operation; host-side builders validate the
+    schedule before tracing. The environment uses the post-step time/state for both the
+    reward and its new observation, and baseline policies use the current time/state.
+    """
+
+    resolve = getattr(task, "at", None)
+    return task if resolve is None else resolve(time_s, rigid)
 
 
 def _nose_heading(attitude_xyzw: Array) -> Array:

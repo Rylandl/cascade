@@ -4,20 +4,289 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CI: "1"
+  JAX_PLATFORMS: cpu
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare verification evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/cascade-evidence"
+          echo "EVIDENCE_DIR=$RUNNER_TEMP/cascade-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - name: Check the lock and build distributions once
+        run: |
+          uv lock --check 2>&1 | tee "$EVIDENCE_DIR/lock-check.log"
+          uv build --no-sources --out-dir release-artifacts/dist 2>&1 | tee "$EVIDENCE_DIR/build.log"
+          uvx --from twine twine check release-artifacts/dist/* 2>&1 | tee "$EVIDENCE_DIR/metadata.log"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path("release-artifacts")
+          wheel, = (root / "dist").glob("*.whl")
+          sdist, = (root / "dist").glob("*.tar.gz")
+          files = sorted([wheel, sdist])
+          entries = {p for p in (root / "dist").iterdir()
+                     if not (p.name == ".gitignore" and p.is_file())}
+          if entries != set(files) or not all(p.is_file() for p in files):
+              raise SystemExit("build requires exactly one wheel and one source distribution")
+          (root / "SHA256SUMS").write_text("".join(
+              f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(root)}\n"
+              for p in files
+          ))
+          evidence = Path(os.environ["EVIDENCE_DIR"])
+          (evidence / "source.json").write_text(json.dumps({
+              "commit": os.environ["GITHUB_SHA"],
+              "ref": os.environ["GITHUB_REF"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "uv_lock_sha256": hashlib.sha256(Path("uv.lock").read_bytes()).hexdigest(),
+          }, indent=2) + "\n")
+          (evidence / "SHA256SUMS").write_bytes((root / "SHA256SUMS").read_bytes())
+          PY
+      - uses: actions/upload-artifact@v5
+        with:
+          name: cascade-distributions-${{ github.sha }}
+          path: release-artifacts/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+      - name: Retain build evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cascade-evidence-build-${{ github.sha }}-attempt${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE_DIR }}/
+          retention-days: 30
+
   test:
+    needs: build
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        python: ["3.12", "3.13"]
+        python: ["3.11", "3.12", "3.13"]
+        dependencies: [locked]
+        include:
+          - os: ubuntu-latest
+            python: "3.11"
+            dependencies: minimum
+          - os: ubuntu-latest
+            python: "3.13"
+            dependencies: current
     steps:
-      - uses: actions/checkout@v4
+      - name: Prepare verification evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/cascade-evidence/examples"
+          echo "EVIDENCE_DIR=$RUNNER_TEMP/cascade-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: uv sync --python ${{ matrix.python }}
-      - run: uv run ruff check .
-      - run: uv run pytest
+      - uses: actions/download-artifact@v6
+        with:
+          name: cascade-distributions-${{ github.sha }}
+          path: release-artifacts
+      - name: Install the dependency profile
+        shell: bash
+        env:
+          PROFILE: ${{ matrix.dependencies }}
+        run: |
+          uv sync --locked 2>&1 | tee "$EVIDENCE_DIR/install-locked.log"
+          if [[ "$PROFILE" == current ]]; then
+            uv sync --upgrade 2>&1 | tee "$EVIDENCE_DIR/install-current.log"
+          elif [[ "$PROFILE" == minimum ]]; then
+            uv pip install --python .venv/bin/python \
+              'jax==0.7.0' 'jaxlib==0.7.0' 'numpy==1.26.0' 'scipy==1.12.0' \
+              'tomli-w==1.2.0' 'gymnasium==1.0.0' 2>&1 | tee "$EVIDENCE_DIR/install-minimum.log"
+          fi
+          uv pip check --python .venv/bin/python 2>&1 | tee "$EVIDENCE_DIR/dependency-check.log"
+          uv pip freeze --python .venv/bin/python > "$EVIDENCE_DIR/dependencies.txt"
+          .venv/bin/python - <<'PY' > "$EVIDENCE_DIR/constraints.txt"
+          from importlib.metadata import distributions
+          print("\n".join(sorted(
+              f"{d.metadata['Name']}=={d.version}" for d in distributions()
+              if d.metadata['Name'] != 'cascade-flight'
+          )))
+          PY
+          .venv/bin/python - <<'PY' > "$EVIDENCE_DIR/runtime.json"
+          import json
+          import os
+          import platform
+          import sys
+          print(json.dumps({
+              "python": sys.version,
+              "platform": platform.platform(),
+              "machine": platform.machine(),
+              "profile": os.environ["PROFILE"],
+              "commit": os.environ["GITHUB_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+          }, indent=2))
+          PY
+      - name: Check lint and artifact hashes
+        run: |
+          .venv/bin/ruff check . 2>&1 | tee "$EVIDENCE_DIR/lint.log"
+          .venv/bin/ruff format --check . 2>&1 | tee "$EVIDENCE_DIR/format.log"
+          cd release-artifacts
+          shasum -a 256 -c SHA256SUMS 2>&1 | tee "$EVIDENCE_DIR/artifact-check.log"
+          cp SHA256SUMS "$EVIDENCE_DIR/"
+      - name: Test the installed wheel outside the checkout
+        shell: bash
+        run: |
+          uv pip install --python .venv/bin/python --no-deps --reinstall release-artifacts/dist/*.whl \
+            2>&1 | tee "$EVIDENCE_DIR/install-wheel.log"
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m pytest "$GITHUB_WORKSPACE/tests" \
+            --junitxml="$EVIDENCE_DIR/pytest.xml" 2>&1 | tee "$EVIDENCE_DIR/pytest.log"
+      - name: Smoke test clean core wheel and sdist installations
+        shell: bash
+        run: |
+          version=$(python -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          for artifact in "$GITHUB_WORKSPACE"/release-artifacts/dist/*; do
+            target="$RUNNER_TEMP/cascade-$(basename "$artifact")"
+            uv venv "$target"
+            uv pip install --python "$target/bin/python" \
+              --constraint "$EVIDENCE_DIR/constraints.txt" "$artifact" \
+              2>&1 | tee "$EVIDENCE_DIR/install-$(basename "$artifact").log"
+            (
+              cd "$RUNNER_TEMP"
+              "$target/bin/python" -I "$GITHUB_WORKSPACE/scripts/release_smoke.py" \
+                --core-only --expected-version "$version"
+            ) 2>&1 | tee "$EVIDENCE_DIR/smoke-$(basename "$artifact").log"
+          done
+      - name: Execute release-critical examples against the installed wheel
+        if: matrix.dependencies == 'current'
+        shell: bash
+        run: |
+          cd "$EVIDENCE_DIR/examples"
+          for example in high_alpha gymnasium_shim x8_trim \
+            flight_envelope research_workflow flight_data_evaluation calibrate_aircraft; do
+            "$GITHUB_WORKSPACE/.venv/bin/python" -I "$GITHUB_WORKSPACE/examples/$example.py" \
+              2>&1 | tee "$EVIDENCE_DIR/example-$example.log"
+          done
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.calibration fit \
+            dist/synthetic-calibration/pack/manifest.json "$EVIDENCE_DIR/cli-calibration" \
+            --config dist/synthetic-calibration/config.json \
+            2>&1 | tee "$EVIDENCE_DIR/calibration-cli-fit.log"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.calibration evaluate \
+            dist/synthetic-calibration/pack/manifest.json "$EVIDENCE_DIR/cli-calibration" \
+            --output "$EVIDENCE_DIR/calibration-cli-evaluation.json" \
+            2>&1 | tee "$EVIDENCE_DIR/calibration-cli-evaluate.log"
+      - name: Run the installed-wheel benchmark smoke campaign
+        if: matrix.dependencies == 'current'
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/benchmark_campaign.py" \
+            --profile smoke --phase all --output "$EVIDENCE_DIR/campaign" \
+            2>&1 | tee "$EVIDENCE_DIR/campaign.log"
+      - name: Exercise the installed sensor-aware learning workflow
+        if: matrix.dependencies == 'current'
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.learning \
+            "$EVIDENCE_DIR/learning" --steps 2 --seeds 0 --horizon 8 \
+            --hidden-size 4 --batch-size 2 --evaluation-episodes 1 \
+            2>&1 | tee "$EVIDENCE_DIR/learning.log"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.learning \
+            "$EVIDENCE_DIR/learning" --resume --steps 1 \
+            2>&1 | tee "$EVIDENCE_DIR/learning-resume.log"
+      - name: Verify policy serialization in a clean export-extra environment
+        if: matrix.dependencies == 'current'
+        shell: bash
+        run: |
+          target="$RUNNER_TEMP/cascade-export"
+          uv venv "$target"
+          wheels=("$GITHUB_WORKSPACE"/release-artifacts/dist/*.whl)
+          uv pip install --python "$target/bin/python" \
+            --constraint "$EVIDENCE_DIR/constraints.txt" "${wheels[0]}[export]" \
+            2>&1 | tee "$EVIDENCE_DIR/install-export.log"
+          cd "$RUNNER_TEMP"
+          "$target/bin/python" -I "$GITHUB_WORKSPACE/scripts/release_smoke.py" --core-only \
+            2>&1 | tee "$EVIDENCE_DIR/smoke-export.log"
+          "$target/bin/python" -I -m cascade.learning "$EVIDENCE_DIR/recurrent-learning" \
+            --architecture recurrent --task scheduled --steps 2 --seeds 0 --horizon 8 \
+            --hidden-size 4 --batch-size 2 --evaluation-episodes 1 \
+            2>&1 | tee "$EVIDENCE_DIR/recurrent-learning.log"
+          JAX_ENABLE_X64=1 "$target/bin/python" -I "$GITHUB_WORKSPACE/examples/export_policy.py" \
+            "$EVIDENCE_DIR/recurrent-learning/seed-0/checkpoint.npz" \
+            "$EVIDENCE_DIR/cascade-policy.cascade-policy" 2>&1 | tee "$EVIDENCE_DIR/export.log"
+          test -s "$EVIDENCE_DIR/cascade-policy.cascade-policy"
+      - name: Retain verification evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cascade-evidence-${{ matrix.os }}-py${{ matrix.python }}-${{ matrix.dependencies }}-${{ github.sha }}-attempt${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE_DIR }}/
+          retention-days: 30
+
+  visualization:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      MUJOCO_GL: osmesa
+      PYOPENGL_PLATFORM: osmesa
+    steps:
+      - name: Prepare verification evidence
+        run: |
+          mkdir -p "$RUNNER_TEMP/cascade-evidence"
+          echo "EVIDENCE_DIR=$RUNNER_TEMP/cascade-evidence" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v6
+        with:
+          name: cascade-distributions-${{ github.sha }}
+          path: release-artifacts
+      - name: Install the visualization extra and software OpenGL
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libosmesa6
+          (cd release-artifacts && shasum -a 256 -c SHA256SUMS) \
+            2>&1 | tee "$EVIDENCE_DIR/artifact-check.log"
+          cp release-artifacts/SHA256SUMS "$EVIDENCE_DIR/"
+          uv venv "$RUNNER_TEMP/cascade-viz"
+          wheels=("$GITHUB_WORKSPACE"/release-artifacts/dist/*.whl)
+          uv pip install --python "$RUNNER_TEMP/cascade-viz/bin/python" "${wheels[0]}[viz]" \
+            2>&1 | tee "$EVIDENCE_DIR/install-viz.log"
+          uv pip freeze --python "$RUNNER_TEMP/cascade-viz/bin/python" > "$EVIDENCE_DIR/dependencies.txt"
+      - name: Render an actual frame from the installed wheel
+        run: |
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/cascade-viz/bin/python" -I "$GITHUB_WORKSPACE/scripts/release_smoke.py" --viz \
+            2>&1 | tee "$EVIDENCE_DIR/smoke-viz.log"
+      - name: Retain visualization evidence
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cascade-evidence-visualization-${{ github.sha }}-attempt${{ github.run_attempt }}
+          path: ${{ env.EVIDENCE_DIR }}/
+          retention-days: 30

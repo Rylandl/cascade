@@ -7,18 +7,20 @@ model parameters).
 
 ```python
 import jax
+import jax.numpy as jnp
 import cascade
-from cascade.env import EpisodeConfig, reset, rollout_actions, step, tracking_task, trimmed_reference
+from cascade.env import EpisodeConfig, action_size, reset, step, tracking_task, trimmed_reference
 
 model = cascade.skywalker_x8()
 task = tracking_task(airspeed_m_s=18.0, altitude_m=100.0, heading_rad=0.0)
-reference = trimmed_reference(model, task)          # one host-side trim
+reference = trimmed_reference(model, task)  # one host-side trim
 config = EpisodeConfig(control_frequency_hz=40.0, horizon_steps=400, channel_scale=0.5)
 
 keys = jax.random.split(jax.random.PRNGKey(0), 1024)
 states, observations = jax.jit(jax.vmap(lambda k: reset(model, config, task, reference, k)))(keys)
 env_step = jax.jit(jax.vmap(lambda s, a: step(model, config, task, reference, s, a)))
-states, observations, rewards, dones, info = env_step(states, actions)   # actions: (1024, P + C)
+actions = jnp.zeros((1024, action_size(model)))  # throttle 0.5, neutral channels
+states, observations, rewards, dones, info = env_step(states, actions)
 ```
 
 ## Pieces
@@ -29,6 +31,7 @@ states, observations, rewards, dones, info = env_step(states, actions)   # actio
 | `TrackingTask` / `tracking_task` | hold an airspeed, altitude, and heading; weights on the normalised errors, body rates, and action effort |
 | `HoverTask` / `hover_task` / `hover_reference` | hold a position with the belly toward an azimuth (a tailsitter's hover); the reference is the static hover from the thrust map, not a trim |
 | `TransitionTask` / `transition_task` | from hover, reach and hold a cruise airspeed, altitude, and heading (belly azimuth); starts from `hover_reference` |
+| Mission tasks | scheduled tracking, timed waypoints and orbit guidance; `task_at` resolves the shared target at each episode time; see [missions](missions.md) |
 | `transition_policy` | the transition controller with a setpoint schedule as a policy: the baseline for a transition task |
 | `ReferenceFlight` / `trimmed_reference` / `hover_reference` | the flight an episode is drawn around (a cruise trim, or a static hover), built once host side; `task.reference(model)` picks the right one |
 | `reset` | Gaussian perturbation of the reference in position, velocity, body-frame attitude, and rates; actuators equilibrated to the trim control |
@@ -73,19 +76,67 @@ reading from that many control periods ago. Both are pure functions of the episo
 noisy episode is still reproducible and differentiable; the true observation is always
 available from `observation`.
 
+`EpisodeConfig.sensors` optionally adds per-block sampling, acquisition and transport jitter,
+delay, dropout and bias drift. Measurement age, validity and freshness are returned separately
+in `info`; the observation vector size is preserved. See [sensor pipelines](sensors.md).
+
+### Sensor-aware policies
+
+`sensor_observation(state)` returns `SensorObservation(values, age_s, valid)` for
+the current delivered observation. The fields share the selected observation
+layout; ages include block and whole-observation delay. Missing readings have
+zero values, infinite ages and false validity. Held readings remain valid while
+their ages grow. Without a sensor pipeline, validity is true and ages still
+include `observation_delay_steps`.
+
+Write a policy as `policy(memory, reading) -> (action, memory)`, then wrap it with
+`sensor_policy(policy)` for `rollout_policy` or an experiment `Policy` factory.
+The adapter passes only the supplied observation, ages and validity to the inner
+policy. It does not expose aircraft state, faults, wind, sensor internals, or the
+episode clock, and it does not recompute truth-based measurements. Observation
+values and metadata must retain the same layout and refer to the same step.
+
+For example, enable the observed cascade's existing age and validity checks:
+
+```python
+from cascade.control import aerobatic_reference_controller
+from cascade.env import observation_cascade_policy, rollout_policy, sensor_policy
+
+observed, memory = observation_cascade_policy(
+    aerobatic_reference_controller(),
+    model,
+    config,
+    task,
+    reference,
+)
+policy = sensor_policy(observed)
+final_state, outputs = rollout_policy(
+    model,
+    config,
+    task,
+    reference,
+    state,
+    policy,
+    memory,
+)
+```
+
+An experiment factory returns `(sensor_policy(observed), memory)` in the same
+way. Existing three-argument/raw-array policies and rollout outputs are unchanged.
+The adapter works with `jit`, `vmap`, and differentiable policies; it leaves
+action bounds and invalid/stale-reading behavior to the policy. In particular,
+check validity before using infinite missing-reading ages in a learned policy.
+
 ## Latency
 
 `EpisodeConfig.action_delay_steps` applies the action commanded that many control periods
-ago, the sense-to-actuate latency a real stack has (one to three periods at 40 Hz is common);
+ago, representing sense-to-actuate latency;
 `action_delay_range` draws the delay per episode over an inclusive integer range, so latency
 is a randomisable leaf like mass or a coefficient. The state carries an action buffer that
 starts full of the reference action, `info["applied_action"]` reports what actually reached
-the actuators, and the cost charges the commanded action. A policy trained at zero delay
-oscillates on hardware; one trained across a range of delays does not, and this is where to
-show it. The hand-tuned aerobatic cascade illustrates the sensitivity on the 12 m/s tracking
-task from perturbed starts (8 episodes, 4 s): at 40 Hz it flies every episode with 25 ms of
-latency, crashes 2 with 50 ms, 3 with 75 ms, and 7 with 100 ms; at 100 Hz it flies every
-episode up to the 40 ms tested.
+the actuators, and the cost charges the commanded action. Evaluate the policy across the
+expected delay range: randomizing delay enables an experiment, but does not itself guarantee
+robustness on hardware. Historical crash-count sweeps are not release qualification results.
 
 ## Failures
 
@@ -117,27 +168,33 @@ good steps and survival alone earns nothing. `done` is crash or horizon; `info` 
 
 ## Gymnasium
 
-There is no Gymnasium dependency. `examples/gymnasium_shim.py` is a single-episode wrapper over
-these functions with the `reset(seed=...)` / `step(action)` contract: a `gymnasium.Env` with real
-spaces when the package is installed, a plain class with the same interface otherwise. Batched
-training loops should stay in JAX and vmap the functions directly; that is where the speed is.
+`cascade.integrations.gymnasium.CascadeEnv` is the optional public single-episode adapter.
+The `gymnasium` extra supplies a real Gymnasium base class and spaces; core installation also
+supports its plain reset/step fallback. `examples/gymnasium_shim.py` demonstrates the packaged
+class. See [Gymnasium integration](gymnasium.md) for seeding, mission and sensor options.
+Batched training loops can vmap the functional episode API directly.
 
 ## Deployment
 
-A policy is a pure function of parameters and observation, so `jax.export` lowers it to a
-serialised StableHLO artifact that runs without Python at inference (XLA or IREE runtimes, or
-conversion to ONNX). `examples/export_policy.py` exports a policy for a fixed observation size,
-reloads the artifact, and checks it against the JAX call bit for bit: the sim-versus-onboard
-check a deployment needs before a first flight. Serialisation needs `flatbuffers` (in the dev
-group).
+A trained policy can be serialized through `jax.export`. `examples/export_policy.py` reads
+a learning checkpoint, exports its learned parameters and sensor/memory contract, reloads
+the inference bundle, and checks action and recurrent-memory agreement across seeded packets.
+This is a JAX serialization round trip; it does not execute on onboard hardware or qualify
+another runtime. Platform and version constraints apply as described in the
+[JAX export documentation](https://docs.jax.dev/en/latest/export/export.html).
+Install the `export` extra for serialization (`flatbuffers`, also in the dev group). See
+[policy learning](learning.md) for the checkpoint and export commands.
 
 ## Baseline
 
 `cascade_policy` wraps a tuned `CascadeController` as a policy, every loop at the environment's
 control rate, so a learned policy has a reference score on the same task, resets, and horizon.
-On the aerobatic reference's 12 m/s tracking task from perturbed starts (2 m, 1 m/s, 0.1 rad,
-0.2 rad/s) at 40 Hz it crashes no episodes and earns a mean reward above 0.6 over 60 steps and
-above 0.8 once settled.
+The sensor-aware learning workflow instead uses `observation_cascade_policy` through
+`sensor_policy`, so the baseline and learned controllers use the same sensor-input contract,
+including delivered values, ages and validity. It compares trim and independently trained controllers on frozen, disjoint
+training/validation/evaluation episode seeds, including held-out sensor stress. Record
+configuration and results rather than assuming one score applies across aircraft,
+perturbations, and software versions.
 
 ## Domain randomisation
 
@@ -156,46 +213,35 @@ starts with the mismatch a real vehicle has from its nominal model.
 
 ```python
 models = broadcast_model(model, (1024,))
-models = models._replace(mass=models.mass * jax.random.uniform(key, (1024,), minval=0.8, maxval=1.2))
+models = models._replace(
+    mass=models.mass * jax.random.uniform(key, (1024,), minval=0.8, maxval=1.2)
+)
 states, obs = jax.vmap(lambda m, k: reset(m, config, task, reference, k))(models, keys)
 ```
 
-On the tailsitter's transition task (hover to 8 m/s at 1.5 m, 100 Hz control, 8 s horizon),
-`transition_policy` with a 3.5 m/s² velocity ramp reaches cruise within 1.5 m/s, earns under 0.6
-mean reward in the first second of hover and above 0.7 in the last second of cruise. A learned
-policy that beats that curve has learned the transition.
+The tailsitter's transition task exercises hover-to-cruise behavior with the same episode
+interface. Compare tracking errors, termination, and rewards on a declared evaluation set;
+a better scalar reward alone does not establish flight transfer.
 
 ## Learning by gradient through the dynamics
 
 Because an episode is differentiable end to end, a policy can be trained by ascending the
 return with the gradient taken straight through `rollout_policy`, no critic or replay buffer.
-`examples/learn_tracking_policy.py` does that with a 32-unit tanh network initialised at the
-trim action, Adam, and gradient clipping, on the aerobatic reference's 12 m/s tracking task
-from perturbed starts (4 s horizon at 40 Hz, batches of 16 episodes):
-
-| policy | mean return over 256 evaluation episodes (max 160) |
-| --- | ---: |
-| hold the trim action | 144.5 |
-| control cascade baseline (`cascade_policy`) | 156.5 |
-| learned, after 60 gradient steps (36 s after an 18 s compile) | 156.8 |
-
-Sixty steps through the physics match a hand-tuned three-loop cascade. The same loop runs
-unchanged on a batch of randomised models, which is how a robust policy is trained here.
+`cascade.learning` provides feedforward and recurrent reference policies initialized at the
+trim action, Adam ascent, clipping and finite-update checks. The default workflow uses the
+aerobatic reference's 12 m/s tracking task from perturbed starts (4 s at 40 Hz, batch size 16),
+three independent training seeds and onboard observation blocks. Run
+`uv run --frozen python -m cascade.learning dist/learning --steps 60`
+to retain actual trained checkpoints, learning curves, schemas, configuration hashes,
+versions and matched validation/evaluation reports. Resume and export use the same weights;
+see the [learning guide](learning.md) for commands, public APIs and interpretation limits.
 
 ## Throughput
 
-`scripts/benchmark_env.py` emits this table for the current backend (run it on a GPU host for a
-GPU row). One control step is ten RK4 sub-steps of the full model (six-surface panels, actuator lags,
-stall dynamics, propeller inflow) at 400 Hz. Measured on an Apple M3 CPU while the machine was
-also running other work, so these are conservative:
-
-| aircraft | batch | ms per control step | env steps / s | RK4 steps / s |
-| --- | ---: | ---: | ---: | ---: |
-| aerobatic reference | 1 | 0.08 | 12 000 | 120 000 |
-| aerobatic reference | 1024 | 13.7 | 75 000 | 750 000 |
-| aerobatic reference | 4096 | 43.8 | 94 000 | 940 000 |
-| Skywalker X8 (coefficient backend) | 1 | 0.07 | 15 000 | 150 000 |
-| Skywalker X8 (coefficient backend) | 1024 | 7.9 | 130 000 | 1 300 000 |
-
-A 4 s episode at 40 Hz is 160 control steps, so batch 1024 runs about 500 episodes per second
-on this CPU; a GPU vmap is the same code.
+`uv run --frozen python scripts/benchmark_env.py --output dist/throughput.json` records a table
+for both backends and batches from 1 to 16384, with model hashes, seeds, versions, and
+configuration. One control step is ten RK4 substeps at 400 Hz. Compilation is excluded by a
+warm-up call; device work is synchronized before and after timing. The reported throughput
+is execution throughput, not end-to-end training or real-time latency. Run on an otherwise
+idle host and record load conditions alongside the JSON. The release record identifies the
+actual measurement platform; GPU performance is not qualified by a CPU run.

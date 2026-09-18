@@ -219,8 +219,13 @@ rendering and hardware adapters         boundary coordinate conversion
 - Versioned, named, unit-explicit aircraft specifications with TOML round-tripping.
 - Whole-aircraft coefficient backend for published models; smooth-spline tables later.
 - Canonical state boundary and a stepped plant for identification tooling.
+- Bounded parameter calibration from frozen fitting recordings, shared differentiable replay,
+  saved aircraft/provenance artifacts and local sensitivity diagnostics. See
+  [aircraft calibration](calibration.md); synthetic recovery does not establish measured-flight accuracy.
 - A published, physically identified reference airframe (Skywalker X8) validated against real
-  flight through that boundary. The aerobatic fixture remains an illustrative software fixture.
+  flight through that boundary in a historical selected-variant replay. Independent held-out
+  accuracy is not established by that result; see `docs/validation.md`. The aerobatic fixture
+  remains an illustrative software fixture.
 
 ### Milestone 3 — autonomy tooling
 
@@ -228,12 +233,12 @@ rendering and hardware adapters         boundary coordinate conversion
   designs from a handful of decisions, validity checks, and a cascade tuned from trim and
   linearisation for any spec. See `docs/archetypes.md`.
 
-- Direct-actuator Gymnasium and native-JAX environments.
+- Done: direct-actuator native-JAX environments and the optional packaged Gymnasium adapter.
 - Done: `cascade.env` — native-JAX episode functions (reset, step, policy rollout) over
   tracking, hover, and transition tasks with the control cascade and the transition controller
-  as baseline policies, batched by vmap (75k to 130k env steps/s on a laptop CPU) and
-  differentiable through the episode: a policy trained by gradient through the dynamics matches
-  the tuned cascade in sixty steps. Sensor noise, bias, and delay, and domain randomisation
+  as baseline policies, batched by vmap and differentiable through the episode. The seeded
+  learning example compares gradient-based training with the tuned cascade; performance and
+  learning outcomes depend on the recorded configuration. Sensor noise, bias, and delay, and domain randomisation
   over model batches. See `docs/environments.md`.
 - Rate, attitude, airspeed, altitude, and path controllers.
 - Done: `cascade.control` — a rate-scheduled rate/attitude/guidance cascade (PX4-style),
@@ -279,10 +284,16 @@ packages, each importing only from the layers below it, and the graph is acyclic
 
 | package | modules | role |
 | --- | --- | --- |
-| `cascade.control` | `loops`, `vtol`, `autotune`, `tuned` | the rate/attitude/guidance cascade, hover and transition, tuning from trim and linearisation, the packaged aircraft's controllers |
-| `cascade.env` | `episode`, `tasks`, `sensors`, `baselines`, `weather`, `gusts`, `family` | episodes over the core for learning and optimisation |
+| `cascade.control` | `loops`, `vtol`, `autotune`, `tuned`, `scheduling` | the control cascade, hover/transition, autotuning, and interpolated airspeed gains |
+| `cascade.env` | `episode`, `tasks`, `missions`, `sensors`, `baselines`, `weather`, `gusts`, `family`, `faults`, `randomisation` | episodes, missions and sensor pipelines over the core |
 | `cascade.design` | `archetypes` | parametric airframes, validation, sampling |
-| `cascade.viz` | `geometry`, `render` | geometry from the spec, MJCF, MuJoCo video (optional `viz` extra) |
+| `cascade.viz` | `geometry`, `render`, `inspector` | geometry/MJCF, optional MuJoCo video, and offline HTML trajectory inspection |
+| `cascade.experiments` | `manifest`, `runner`, `flight_data` | frozen scenarios, matched comparisons, metrics and reproducible replay packs |
+| `cascade.integrations` | `gymnasium` | optional public single-aircraft Gymnasium adapter |
+
+The analysis layer also includes `turn_trim`: steady-turn relative equilibria verified against
+the same nonlinear dynamics. See [envelope tools](envelope.md). Host experiment/reporting layers
+compose the numerical layers without adding dependencies to the physics kernel.
 
 Two configuration conventions, deliberately: anything a computation traces (gains, tasks,
 weather conditions, setpoints, states) is a `NamedTuple` and therefore a JAX pytree that can
@@ -309,4 +320,3 @@ the same file, so simulated and flown trajectories compare on equal terms.
 Two entry points wrap the core on purpose: `Plant` is the hardware-like boundary (canonical
 state, spec channel units, held commands) for identification tooling, and `cascade.env` is
 the learning boundary (normalised actions, body-frame observations, rewards).
-

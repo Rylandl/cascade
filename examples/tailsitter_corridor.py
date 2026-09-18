@@ -44,8 +44,9 @@ def main() -> None:
     print_branch("Conventional branch (exists above the stall speed)", conventional)
     print_branch("Thrust-borne branch (near hover to cruise)", thrust_borne)
     print(
-        "\nBoth branches coexist above about 6.5 m/s; below it only the thrust-borne branch "
-        "remains, and around 3-4.5 m/s it needs nearly full nose-up elevon."
+        "\nFor this seed and grid, both branches trim at 7-8 m/s; the conventional candidates "
+        "at 6 and 6.5 m/s fail the balance check. The thrust-borne branch uses its largest "
+        "nose-up elevator command around 4 m/s (about -0.30 normalized)."
     )
 
 

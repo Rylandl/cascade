@@ -28,6 +28,15 @@ from cascade.control.loops import (
     initial_cascade_state,
     rate_controller,
 )
+from cascade.control.scheduling import (
+    GainSchedule,
+    ScheduleReport,
+    build_gain_schedule,
+    controller_at_speed,
+    scheduled_cascade_step,
+    scheduled_closed_loop_rollout,
+    tune_gain_schedule,
+)
 from cascade.control.tuned import (
     aerobatic_reference_controller,
     skywalker_x8_controller,
@@ -56,6 +65,13 @@ from cascade.control.vtol import (
 
 __all__ = [
     "AttitudeGains",
+    "GainSchedule",
+    "ScheduleReport",
+    "build_gain_schedule",
+    "controller_at_speed",
+    "scheduled_cascade_step",
+    "scheduled_closed_loop_rollout",
+    "tune_gain_schedule",
     "CascadeController",
     "CascadeState",
     "ChannelMap",

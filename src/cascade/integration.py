@@ -65,7 +65,13 @@ def weighted_derivative(
 
 
 def project_state(model: AircraftModel, state: AircraftState) -> AircraftState:
-    """Restore quaternion and bounded physical-state invariants after an integration step."""
+    """Restore quaternion, surface-stop, separation, and nonnegative-RPM invariants.
+
+    Motor speed limits bound the commanded target, not the instantaneous shaft speed: a
+    running motor must be able to spin down through its lag after those limits are lowered
+    by a failure or derating. The motor ODE keeps speed within the initial/target envelope
+    when integrated with a timestep appropriate to its time constant.
+    """
 
     rigid_body = state.rigid_body._replace(attitude=normalize(state.rigid_body.attitude))
     actuators = ActuatorState(
@@ -74,11 +80,7 @@ def project_state(model: AircraftModel, state: AircraftState) -> AircraftState:
             -model.actuators.surface_limit,
             model.actuators.surface_limit,
         ),
-        propeller_speed=jnp.clip(
-            state.actuators.propeller_speed,
-            model.actuators.propeller_speed_min,
-            model.actuators.propeller_speed_max,
-        ),
+        propeller_speed=jnp.maximum(state.actuators.propeller_speed, 0.0),
     )
     aero = AeroState(separation=jnp.clip(state.aero.separation, 0.0, 1.0))
     return AircraftState(rigid_body=rigid_body, actuators=actuators, aero=aero)

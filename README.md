@@ -26,7 +26,40 @@ the same pure functional core.
 - **Airframe-specific truth.** The engine is reusable, but high-alpha parameters and residuals are
   expected to be identified for each airframe.
 
-Quick test run: `uv run pytest -m "not slow"` (the full suite takes several minutes).
+Current candidate: **0.4.0rc1**. See the [current candidate checks](docs/rc-readiness.md).
+Archived [0.4.0.dev0 checks](docs/feature-readiness.md) and
+[0.3.0rc1 checks](docs/release-readiness.md) apply to their preserved artifacts. See
+[supported interfaces and migration notes](docs/compatibility.md) and [validation limits](docs/validation.md).
+
+New research workflows connect [frozen experiments and controller comparisons](docs/experiments.md)
+to an [offline HTML flight inspector](docs/inspection.md). Episodes now support
+[scheduled, waypoint and orbit missions](docs/missions.md), [multirate sensors with dropout,
+drift and timing jitter](docs/sensors.md), and a packaged [Gymnasium integration](docs/gymnasium.md).
+[Turn trim and airspeed-dependent gains](docs/envelope.md) expand the analysis/control layer;
+[flight-data packs](docs/flight-data.md) provide explicit splits and replay scoring.
+
+Run `uv run python examples/research_workflow.py --output dist/my-experiment` to generate
+a matched controller comparison and standalone HTML reports. The folder must be new or empty.
+The flight-data example uses explicitly synthetic recordings; it supplies no new flight-accuracy claim.
+
+The [observation-only controller](docs/observed-control.md) consumes the same sensor vector as
+a learned policy. The [sustained benchmark campaign](docs/benchmark-campaign.md) freezes longer
+missions, seed splits and acceptance limits before evaluation, including paired sensor stress.
+For candidate installation and feedback, use the [prerelease tester guide](docs/prerelease-feedback.md).
+
+Development after that candidate adds [sensor-aware policy learning](docs/learning.md):
+feedforward/recurrent controllers, resumable training checkpoints, and evaluation/export of
+the same learned weights. Run `uv run python -m cascade.learning dist/learning --steps 60`
+for a frozen, three-seed tracking benchmark. Its verification is recorded separately from
+the preserved candidate artifacts.
+
+[Aircraft calibration](docs/calibration.md) estimates bounded mass, inertia and aerodynamic
+parameters from the fitting split of a frozen flight-recording pack. Saved aircraft specifications
+include fit diagnostics and provenance, and can be scored on validation/evaluation maneuvers.
+Run `uv run python examples/calibrate_aircraft.py --output dist/synthetic-calibration`
+for a synthetic parameter-recovery example.
+
+Quick test run: `uv run --frozen pytest -m "not slow"` (the full suite takes several minutes).
 
 See [the architecture document](docs/architecture.md) for scope, equations, extension points,
 the package layout, and the roadmap. The [analysis guide](docs/analysis.md) covers trim, post-stall branch continuation,
@@ -42,25 +75,30 @@ MJCF export, and MuJoCo video ([tailsitter round trip](docs/media/tailsitter_rou
 ## Install
 
 ```bash
-uv add "cascade-flight @ git+https://github.com/Rylandl/cascade"
+git clone https://github.com/Rylandl/cascade
+cd cascade
+uv sync --frozen --python 3.13
 ```
 
-or with pip, `pip install "cascade-flight @ git+https://github.com/Rylandl/cascade"`. Python 3.11
-to 3.13; the only runtime dependencies are JAX, SciPy, and tomli-w.
+Alternatively, `pip install .` from the checkout, or install a verified wheel using the
+[release instructions](docs/releasing.md). Candidate publication is a separate release step.
+Python 3.11 to 3.13; runtime dependencies are JAX, NumPy, SciPy, and tomli-w. MuJoCo rendering
+is optional (`viz` extra); JAX policy serialization needs the `export` extra.
 
 ## Development
 
 ```bash
-uv sync --python 3.13
-uv run pytest
-uv run ruff check .
+uv sync --frozen --python 3.13
+uv run --frozen pytest
+uv run --frozen ruff check .
 ```
 
 The bundled aerobatic reference aircraft is intentionally an illustrative dynamics fixture.
 `cascade.skywalker_x8()` is assembled from the published NTNU Skywalker X8 model with full
-provenance; its first validation against real flight, through Glassbox's X8 campaign adapter,
-is recorded in Glassbox's `docs/cascade-x8-validation.md` (unfitted, within the paper's stated
-CG and inertia uncertainty: 0.68 of kinematic persistence, 1.33x the fitted effective model).
+provenance. The former flight-replay headline selected a parameter variant using the scored
+maneuvers and should not have been described as unfitted. It is withdrawn pending a
+reproducible held-out evaluation; see [the evidence statement](docs/validation.md). Full-envelope
+numerical behavior is tested, while physical accuracy requires airframe-specific calibration.
 
 ## Minimal rollout
 

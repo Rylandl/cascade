@@ -20,6 +20,7 @@ from cascade.analysis.trim import (
     continue_trims,
     trim_straight_flight,
 )
+from cascade.analysis.turn_trim import SteadyTurnCondition, TurnTrimResult, trim_steady_turn
 
 __all__ = [
     "control_authority",
@@ -28,6 +29,9 @@ __all__ = [
     "StraightFlightCondition",
     "StepLinearization",
     "TrimResult",
+    "SteadyTurnCondition",
+    "TurnTrimResult",
+    "trim_steady_turn",
     "aerodynamic_sweep",
     "continue_trims",
     "control_retract",
