@@ -195,6 +195,17 @@ jobs:
           "$GITHUB_WORKSPACE/.venv/bin/python" -I "$GITHUB_WORKSPACE/scripts/benchmark_campaign.py" \
             --profile smoke --phase all --output "$EVIDENCE_DIR/campaign" \
             2>&1 | tee "$EVIDENCE_DIR/campaign.log"
+      - name: Exercise the installed sensor-aware learning workflow
+        if: matrix.dependencies == 'current'
+        run: |
+          cd "$RUNNER_TEMP"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.learning \
+            "$EVIDENCE_DIR/learning" --steps 2 --seeds 0 --horizon 8 \
+            --hidden-size 4 --batch-size 2 --evaluation-episodes 1 \
+            2>&1 | tee "$EVIDENCE_DIR/learning.log"
+          "$GITHUB_WORKSPACE/.venv/bin/python" -I -m cascade.learning \
+            "$EVIDENCE_DIR/learning" --resume --steps 1 \
+            2>&1 | tee "$EVIDENCE_DIR/learning-resume.log"
       - name: Verify policy serialization in a clean export-extra environment
         if: matrix.dependencies == 'current'
         shell: bash
@@ -208,9 +219,14 @@ jobs:
           cd "$RUNNER_TEMP"
           "$target/bin/python" -I "$GITHUB_WORKSPACE/scripts/release_smoke.py" --core-only \
             2>&1 | tee "$EVIDENCE_DIR/smoke-export.log"
+          "$target/bin/python" -I -m cascade.learning "$EVIDENCE_DIR/recurrent-learning" \
+            --architecture recurrent --task scheduled --steps 2 --seeds 0 --horizon 8 \
+            --hidden-size 4 --batch-size 2 --evaluation-episodes 1 \
+            2>&1 | tee "$EVIDENCE_DIR/recurrent-learning.log"
           "$target/bin/python" -I "$GITHUB_WORKSPACE/examples/export_policy.py" \
-            "$EVIDENCE_DIR/cascade-policy.stablehlo" 2>&1 | tee "$EVIDENCE_DIR/export.log"
-          test -s "$EVIDENCE_DIR/cascade-policy.stablehlo"
+            "$EVIDENCE_DIR/recurrent-learning/seed-0/checkpoint.npz" \
+            "$EVIDENCE_DIR/cascade-policy.cascade-policy" 2>&1 | tee "$EVIDENCE_DIR/export.log"
+          test -s "$EVIDENCE_DIR/cascade-policy.cascade-policy"
       - name: Retain verification evidence
         if: always()
         uses: actions/upload-artifact@v5

@@ -106,8 +106,19 @@ shape. Ages are floating-point seconds and validity is boolean. The wrapper
 rejects required readings whose age is nonfinite, negative, or greater than
 `max_sensor_age_s` (factory default: 0.5 seconds), or whose validity is false.
 For a valid delayed pitot reading it also decodes normalization using the commanded
-speed at acquisition time. Ordinary `rollout_policy` and the experiment runner
-supply raw arrays; metadata requires an explicit caller adapter or episode loop.
+speed at acquisition time. To carry this metadata through ordinary `rollout_policy`
+and experiment factories, wrap the controller with the public adapter:
+
+```python
+from cascade.env import sensor_policy
+
+policy, memory = observation_cascade_policy(controller, model, config, task, reference)
+policy = sensor_policy(policy)
+# Pass policy and memory to rollout_policy, or return them from an experiment factory.
+```
+
+The adapter passes only the delivered values, acquisition ages and validity to the controller.
+See [sensor-aware learning](learning.md) for trained policies using the same input contract.
 
 With either input form, a nonfinite required reading, nonpositive airspeed,
 degenerate gravity/heading vector, or near-vertical pitch causes the policy to

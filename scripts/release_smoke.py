@@ -61,6 +61,7 @@ def main() -> None:
         "cascade.design",
         "cascade.analysis",
         "cascade.experiments",
+        "cascade.learning",
     ):
         module = importlib.import_module(module_name)
         for name in module.__all__:

@@ -47,6 +47,12 @@ a learned policy. The [sustained benchmark campaign](docs/benchmark-campaign.md)
 missions, seed splits and acceptance limits before evaluation, including paired sensor stress.
 For candidate installation and feedback, use the [prerelease tester guide](docs/prerelease-feedback.md).
 
+Development after that candidate adds [sensor-aware policy learning](docs/learning.md):
+feedforward/recurrent controllers, resumable training checkpoints, and evaluation/export of
+the same learned weights. Run `uv run python -m cascade.learning dist/learning --steps 60`
+for a frozen, three-seed tracking benchmark. Its verification is recorded separately from
+the preserved candidate artifacts.
+
 Quick test run: `uv run --frozen pytest -m "not slow"` (the full suite takes several minutes).
 
 See [the architecture document](docs/architecture.md) for scope, equations, extension points,

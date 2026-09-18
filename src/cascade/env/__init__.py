@@ -3,7 +3,6 @@ policies, families of airframes, and weather. See ``docs/environments.md``."""
 
 from cascade.env.baselines import (
     ObservationCascadeState,
-    SensorObservation,
     cascade_policy,
     observation_cascade_policy,
     transition_policy,
@@ -42,6 +41,7 @@ from cascade.env.missions import (
     scheduled_tracking_task,
     waypoint_task,
 )
+from cascade.env.policies import SensorObservation, sensor_observation, sensor_policy
 from cascade.env.randomisation import Randomisation, randomisation, sample_models
 from cascade.env.sensors import (
     ObservationSpec,
@@ -84,6 +84,8 @@ from cascade.env.weather import (
 __all__ = [
     "ObservationCascadeState",
     "SensorObservation",
+    "sensor_observation",
+    "sensor_policy",
     "observation_cascade_policy",
     "MissionTarget",
     "OrbitTask",

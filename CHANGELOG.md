@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased: sensor-aware policy learning
+
+- Add `cascade.learning` with sensor-aware feedforward and recurrent reference policies,
+  configurable differentiable training, finite-update checks and explicit optimizer/RNG state.
+- Add versioned, atomic, non-pickle checkpoints and inference bundles that preserve trained
+  weights, normalization, sensor/action schemas, recurrent memory contracts and provenance.
+- Add `sensor_observation` and `sensor_policy` adapters for delivered measurement values,
+  ages and validity in ordinary rollouts and experiments. Existing array policies are unchanged.
+- Add a frozen tracking/scheduled-tracking workflow with independent training seeds, disjoint
+  episode splits, held-out sensor stress, observation-only baseline comparisons and saved curves.
+- The learning example now takes a run directory and supports `--resume`; the export example
+  takes a training checkpoint and output path. It no longer exports unrelated random weights.
+
+These are feature-development changes; the 0.4.0rc1 artifacts and their evidence are preserved.
+
 ## 0.4.0rc1 (unreleased candidate)
 
 - Add frozen experiment manifests with disjoint seed splits, matched policy comparisons,

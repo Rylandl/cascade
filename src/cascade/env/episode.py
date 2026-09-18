@@ -641,7 +641,10 @@ def rollout_policy(
 
     ``policy(policy_state, observation, env_state) -> (action, policy_state)``: a learned policy
     reads the observation and ignores the environment state; a model-based baseline such as
-    :func:`cascade_policy` may read the state directly.
+    :func:`cascade_policy` may read the state directly. Wrap a two-argument
+    ``policy(policy_state, SensorObservation)`` with :func:`cascade.env.sensor_policy`
+    to receive the delivered values, acquisition ages and validity without hidden
+    aircraft state. The rollout's returned observations remain ordinary value arrays.
     """
 
     first_observation = state.observation_buffer[0]

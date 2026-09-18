@@ -26,7 +26,8 @@ the `export` extra. Neither optional dependency is required to import or use the
 ## Public Python interface
 
 The documented names in `cascade.__all__` and the `__all__` lists of `cascade.analysis`,
-`cascade.control`, `cascade.env`, `cascade.design`, `cascade.viz`, and `cascade.experiments`
+`cascade.control`, `cascade.env`, `cascade.design`, `cascade.viz`, `cascade.experiments`,
+and `cascade.learning`
 are public, as is `cascade.integrations.gymnasium.CascadeEnv`. Import optional integrations
 from their explicit module; importing `cascade.integrations` does not import Gymnasium. Underscored
 helpers and unexported implementation details are internal. Specifications and configuration
@@ -38,7 +39,10 @@ The core dynamics, canonical conversion, specifications, trim/linearization, epi
 and documented controllers are supported research interfaces. Archetype generation and
 automatic tuning, learned-policy examples, and exported JAX
 artifacts remain experimental. Generated airframes are plausible fixtures, not calibrated
-models of a population of real aircraft.
+models of a population of real aircraft. The new [learning interfaces](learning.md) are
+experimental research APIs with versioned checkpoint/inference schemas. Their reference
+networks use float32. Resume reproducibility requires the same software/backend/precision
+configuration; JAX export compatibility also depends on platform and JAX version.
 
 The v0.2 compatibility modules (`cascade.vtol`, `autotune`, `weather`, `gusts`, `family`,
 `archetypes`, `geometry`, `render`) and `cascade.env.Reference` remain available in this

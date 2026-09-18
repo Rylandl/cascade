@@ -34,23 +34,10 @@ from cascade.env.episode import (
     observation_layout,
     observation_size,
 )
+from cascade.env.policies import SensorObservation
 from cascade.env.tasks import ReferenceFlight, TrackingTask, TransitionTask, task_at
 from cascade.math import quaternion_from_euler, safe_norm
 from cascade.model import AircraftModel
-
-
-class SensorObservation(NamedTuple):
-    """Public measurement input with per-element acquisition ages and validity.
-
-    All three arrays have the observation vector's shape; ``age_s`` is in seconds
-    and ``valid`` is boolean. Invalid elements may have infinite ages. This is an
-    optional input to :func:`observation_cascade_policy`; ordinary episode rollouts
-    pass just the values and therefore cannot reject stale, finite measurements.
-    """
-
-    values: Array
-    age_s: Array
-    valid: Array
 
 
 class ObservationCascadeState(NamedTuple):

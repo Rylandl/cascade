@@ -80,6 +80,53 @@ available from `observation`.
 delay, dropout and bias drift. Measurement age, validity and freshness are returned separately
 in `info`; the observation vector size is preserved. See [sensor pipelines](sensors.md).
 
+### Sensor-aware policies
+
+`sensor_observation(state)` returns `SensorObservation(values, age_s, valid)` for
+the current delivered observation. The fields share the selected observation
+layout; ages include block and whole-observation delay. Missing readings have
+zero values, infinite ages and false validity. Held readings remain valid while
+their ages grow. Without a sensor pipeline, validity is true and ages still
+include `observation_delay_steps`.
+
+Write a policy as `policy(memory, reading) -> (action, memory)`, then wrap it with
+`sensor_policy(policy)` for `rollout_policy` or an experiment `Policy` factory.
+The adapter passes only the supplied observation, ages and validity to the inner
+policy. It does not expose aircraft state, faults, wind, sensor internals, or the
+episode clock, and it does not recompute truth-based measurements. Observation
+values and metadata must retain the same layout and refer to the same step.
+
+For example, enable the observed cascade's existing age and validity checks:
+
+```python
+from cascade.control import aerobatic_reference_controller
+from cascade.env import observation_cascade_policy, rollout_policy, sensor_policy
+
+observed, memory = observation_cascade_policy(
+    aerobatic_reference_controller(),
+    model,
+    config,
+    task,
+    reference,
+)
+policy = sensor_policy(observed)
+final_state, outputs = rollout_policy(
+    model,
+    config,
+    task,
+    reference,
+    state,
+    policy,
+    memory,
+)
+```
+
+An experiment factory returns `(sensor_policy(observed), memory)` in the same
+way. Existing three-argument/raw-array policies and rollout outputs are unchanged.
+The adapter works with `jit`, `vmap`, and differentiable policies; it leaves
+action bounds and invalid/stale-reading behavior to the policy. In particular,
+check validity before using infinite missing-reading ages in a learned policy.
+
 ## Latency
 
 `EpisodeConfig.action_delay_steps` applies the action commanded that many control periods
