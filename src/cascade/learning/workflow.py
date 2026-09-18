@@ -551,8 +551,9 @@ def _write_summary(path, summary):
         "",
         "Frozen experiment: `" + summary["experiment_sha256"] + "`.",
         "",
-        "The trim policy is the untrained zero-residual network. All policies receive "
-        "the same measurement stream. Figures describe this finite seeded simulator experiment.",
+        "The trim policy is the untrained zero-residual network. All policies use "
+        "the same sensor settings and paired episode seeds. Figures describe this finite "
+        "seeded simulator experiment.",
     ]
     for split, result in summary["evaluations"].items():
         lines.extend(

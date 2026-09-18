@@ -176,21 +176,25 @@ Batched training loops can vmap the functional episode API directly.
 
 ## Deployment
 
-A policy can be serialized through `jax.export`. `examples/export_policy.py` exports randomly
-initialized network parameters for a fixed observation size, reloads the JAX Exported artifact
-containing StableHLO, and asserts agreement with the JAX function across 32 seeded observations.
+A trained policy can be serialized through `jax.export`. `examples/export_policy.py` reads
+a learning checkpoint, exports its learned parameters and sensor/memory contract, reloads
+the inference bundle, and checks action and recurrent-memory agreement across seeded packets.
 This is a JAX serialization round trip; it does not execute on onboard hardware or qualify
 another runtime. Platform and version constraints apply as described in the
 [JAX export documentation](https://docs.jax.dev/en/latest/export/export.html).
-Install the `export` extra for serialization (`flatbuffers`, also in the dev group).
+Install the `export` extra for serialization (`flatbuffers`, also in the dev group). See
+[policy learning](learning.md) for the checkpoint and export commands.
 
 ## Baseline
 
 `cascade_policy` wraps a tuned `CascadeController` as a policy, every loop at the environment's
 control rate, so a learned policy has a reference score on the same task, resets, and horizon.
-`examples/learn_tracking_policy.py` evaluates that baseline and the learned policy on the same
-256 evaluation episodes, separate from training seeds. Record configuration and results rather
-than assuming one score applies across aircraft, perturbations, and software versions.
+The sensor-aware learning workflow instead uses `observation_cascade_policy` through
+`sensor_policy`, so the baseline and learned controllers use the same sensor-input contract,
+including delivered values, ages and validity. It compares trim and independently trained controllers on frozen, disjoint
+training/validation/evaluation episode seeds, including held-out sensor stress. Record
+configuration and results rather than assuming one score applies across aircraft,
+perturbations, and software versions.
 
 ## Domain randomisation
 
@@ -223,14 +227,14 @@ a better scalar reward alone does not establish flight transfer.
 
 Because an episode is differentiable end to end, a policy can be trained by ascending the
 return with the gradient taken straight through `rollout_policy`, no critic or replay buffer.
-`examples/learn_tracking_policy.py` does that with a 32-unit tanh network initialised at the
-trim action, Adam, and gradient clipping, on the aerobatic reference's 12 m/s tracking task
-from perturbed starts (4 s horizon at 40 Hz, batches of 16 episodes). Run
-`uv run --frozen python examples/learn_tracking_policy.py --output dist/learning.json`
-to record returns, model/specification hashes, versions, seeds, hyperparameters, and wall time.
-The training initialization uses seed 0; minibatch seeds are iterations 1–60; evaluation seed
-999 is separate. This demonstrates one reproducible optimization experiment, not a multi-seed
-learning-efficiency result. The release record lists executed examples.
+`cascade.learning` provides feedforward and recurrent reference policies initialized at the
+trim action, Adam ascent, clipping and finite-update checks. The default workflow uses the
+aerobatic reference's 12 m/s tracking task from perturbed starts (4 s at 40 Hz, batch size 16),
+three independent training seeds and onboard observation blocks. Run
+`uv run --frozen python -m cascade.learning dist/learning --steps 60`
+to retain actual trained checkpoints, learning curves, schemas, configuration hashes,
+versions and matched validation/evaluation reports. Resume and export use the same weights;
+see the [learning guide](learning.md) for commands, public APIs and interpretation limits.
 
 ## Throughput
 

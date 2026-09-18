@@ -68,12 +68,16 @@ uv pip install --python "$work/export/bin/python" "${wheels[0]}[export]"
 (
   cd "$work"
   "$work/export/bin/python" -I "$repo/scripts/release_smoke.py" --core-only --expected-version "$version"
-  "$work/export/bin/python" -I "$repo/examples/export_policy.py" "$work/policy.stablehlo"
+  "$work/export/bin/python" -I -m cascade.learning "$work/learning" \
+    --steps 2 --seeds 0 --horizon 8 --hidden-size 4 --batch-size 2 --evaluation-episodes 1
+  "$work/export/bin/python" -I "$repo/examples/export_policy.py" \
+    "$work/learning/seed-0/checkpoint.npz" "$work/policy.cascade-policy"
 )
 ```
 
-The example asserts numerical agreement between the original policy and its deserialized
-JAX artifact across a seeded batch. This qualifies the JAX serialization round trip only;
+The example asserts action and memory agreement between the saved trained policy and its
+deserialized JAX artifact across seeded sensor packets. The short training run above checks
+the workflow, not learning performance. This qualifies the JAX serialization round trip only;
 it does not qualify an onboard runtime or the performance of a trained policy.
 
 For visualization, create another clean environment and install the wheel's `viz` extra.
