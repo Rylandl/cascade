@@ -1,3 +1,11 @@
+# Release-candidate status (2026-09-18)
+
+The entries below are a historical development log, not the current release evidence.
+See [release readiness](../docs/release-readiness.md), [compatibility](../docs/compatibility.md),
+and [validation](../docs/validation.md) for the 0.3.0rc1 candidate. In particular, earlier X8
+scores used selected variants and are not independent held-out accuracy claims. Weather,
+faults, export examples, and packaging evolved after the earlier phases; use current docs.
+
 # Cascade milestone: X8 plant validated against real flight through Glassbox
 
 Plan of record: `~/.claude/plans/refactored-wishing-neumann.md` (approved 2026-09-01).

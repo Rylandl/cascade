@@ -98,10 +98,23 @@ carry its physical actuators.
 | `[body]` | `stall_angle_rad`, `stall_width_rad` | blend of the `alpha` polynomials to the flat plate |
 | `[body]` | `normal_force_coefficient`, `pitch_flat_plate` | flat-plate `C_N` (about 2) and post-stall pitching moment |
 | `[body]` | `deflection_map` | 3 rows (aileron, elevator, rudder) by `S` columns over physical surface angles |
+| `[body]` | `reference_position_m` (optional) | 3 body-FRD metres from the current center of mass to the coefficient reference; defaults to `[0, 0, 0]` |
 
 Angles are radians, trailing-edge-down positive for every generalized control, matching the
 Beard and McLain convention used by most published small-UAV models. For elevons on a flying
 wing with left and right surfaces `L`, `R`: elevator `= (dL + dR) / 2`, aileron `= (dL - dR) / 2`.
+
+The coefficient reference compiles to `model.body.reference_position`. With offset `r`, the
+coefficient block evaluates local air velocity as `v_air_at_CG + omega × r` and translates its
+moment to the current center of mass as `M_CG = M_reference + r × F`. Reported body wrenches and
+the combined coefficients from `aerodynamic_sweep` are about the current CG; diagnostic
+`BodyResult.coefficients` retain the coefficient table's own reference. Component surface and
+propeller positions also remain relative to the current CG.
+
+`center_of_mass_shift_m` randomisation translates all those references consistently, including
+the body coefficient reference. It does not infer how the mass distribution changed: the
+inertia tensor remains the supplied inertia about the new CG, unless independently randomized.
+Schema 2 files without `reference_position_m` retain their previous zero-offset behavior.
 
 ## Provenance
 
@@ -109,3 +122,9 @@ The bundled `cascade-aerobatic-reference` file is deliberately labeled as a soft
 physically identified specification should record, in its `description` and comments, the source
 of every coefficient group, the reference point the moments are about, the mass and inertia
 measurement, and any parameter the author chose between conflicting published values.
+
+Specification and compiled-model hashes include the coefficient reference. Omitted and explicit
+zero reference positions normalize identically within this version; a nonzero change alters both
+hashes. Hashes identify the serialized representation and are not guaranteed to remain equal
+across Cascade versions: the added zero reference leaf changes historical compiled-model hashes,
+and normalization adds the default key to body specifications.

@@ -98,8 +98,8 @@ into the aircraft's actual channels:
 
 ```python
 class ChannelMap(NamedTuple):
-    matrix: Array   # [C, 3]: unit [roll, pitch, yaw] -> per-channel command
-    limit: Array    # [C]: symmetric clip per channel, in the spec's own channel units
+    matrix: Array  # [C, 3]: unit [roll, pitch, yaw] -> per-channel command
+    limit: Array  # [C]: symmetric clip per channel, in the spec's own channel units
 ```
 
 `channel_map(spec, roles, limits)` builds it from named roles, one of `"roll"`, `"pitch"`, or
@@ -123,7 +123,8 @@ channel_map(spec, roles={"aileron": "roll", "elevator": "-pitch", "rudder": "yaw
 
 # Skywalker X8: aileron, elevator channels (no rudder), radians
 channel_map(
-    spec, roles={"aileron": "roll", "elevator": "-pitch"},
+    spec,
+    roles={"aileron": "roll", "elevator": "-pitch"},
     limits={"aileron": 0.35, "elevator": 0.35},
 )
 ```
@@ -142,9 +143,9 @@ class CascadeController(NamedTuple):
     rate: RateGains
     attitude: AttitudeGains
     guidance: GuidanceGains
-    rate_period: int        # simulation steps between rate-loop updates
-    attitude_period: int    # simulation steps between attitude-loop updates
-    guidance_period: int    # simulation steps between guidance-loop updates
+    rate_period: int  # simulation steps between rate-loop updates
+    attitude_period: int  # simulation steps between attitude-loop updates
+    guidance_period: int  # simulation steps between guidance-loop updates
 ```
 
 `cascade_step` evaluates every loop on *every* call — nothing here branches on an array value —
@@ -228,6 +229,7 @@ trim = cascade.trim_straight_flight(
 environment = cascade.standard_environment()
 rate_setpoint = jnp.array([1.0, 0.0, 0.0])  # 1 rad/s roll-rate step
 
+
 def tracking_error(kp):
     gains = controller.rate._replace(kp=kp)
 
@@ -238,7 +240,8 @@ def tracking_error(kp):
         )
         channel = jnp.clip(
             jnp.einsum("cr,r->c", controller.channels.matrix, command),
-            -controller.channels.limit, controller.channels.limit,
+            -controller.channels.limit,
+            controller.channels.limit,
         )
         control = cascade.ControlInput(propeller=trim.control.propeller, channel=channel)
         next_state = cascade.rk4_step(model, state, control, environment, 0.01)
@@ -248,6 +251,7 @@ def tracking_error(kp):
     _, trajectory = jax.lax.scan(step, (trim.state, rate_state0), None, length=100)
     roll_rate = trajectory.rigid_body.angular_velocity[:, 0]
     return jnp.mean(jnp.square(roll_rate - 1.0))
+
 
 kp = jnp.array([0.02, 0.02, 0.02])  # deliberately detuned
 grad_fn = jax.grad(tracking_error)

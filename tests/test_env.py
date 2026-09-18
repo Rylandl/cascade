@@ -19,6 +19,55 @@ from cascade.reference import aerobatic_reference
 pytestmark = pytest.mark.slow
 
 
+@pytest.mark.parametrize(
+    "kwargs,match",
+    [
+        ({"simulation_frequency_hz": -400.0, "control_frequency_hz": -40.0}, "frequency"),
+        ({"simulation_frequency_hz": 0.0}, "frequency"),
+        ({"control_frequency_hz": 0.0}, "frequency"),
+        ({"simulation_frequency_hz": float("inf")}, "frequency"),
+        ({"control_frequency_hz": float("nan")}, "frequency"),
+        ({"control_frequency_hz": 41.0}, "integer multiple"),
+        ({"simulation_frequency_hz": 1e308, "control_frequency_hz": 1e-300}, "integer multiple"),
+        ({"horizon_steps": 0}, "horizon_steps"),
+        ({"horizon_steps": 2.5}, "horizon_steps"),
+        ({"horizon_steps": True}, "horizon_steps"),
+        ({"observation_delay_steps": -1}, "observation_delay_steps"),
+        ({"observation_delay_steps": 0.5}, "observation_delay_steps"),
+        ({"action_delay_steps": 0.5}, "action_delay_steps"),
+        ({"action_delay_range": (0, 0.5)}, "action_delay_range"),
+        ({"action_delay_range": (-1, 2)}, "action_delay_range"),
+        ({"action_delay_range": (2, 1)}, "action_delay_range"),
+        ({"action_delay_range": (1,)}, "action_delay_range"),
+        ({"channel_scale": 0.0}, "channel_scale"),
+        ({"channel_scale": float("nan")}, "channel_scale"),
+        ({"reset_position_std_m": -1.0}, "reset_position_std_m"),
+        ({"reset_velocity_std_m_s": float("inf")}, "reset_velocity_std_m_s"),
+        ({"reset_attitude_std_rad": -0.1}, "reset_attitude_std_rad"),
+        ({"reset_rate_std_rad_s": float("nan")}, "reset_rate_std_rad_s"),
+        ({"upright_limit_rad": -1.0}, "upright_limit_rad"),
+        ({"crash_altitude_m": float("nan")}, "crash_altitude_m"),
+        ({"step": None}, "step"),
+    ],
+)
+def test_episode_config_rejects_invalid_host_inputs(kwargs, match):
+    with pytest.raises(ValueError, match=match):
+        EpisodeConfig(**kwargs)
+
+
+def test_episode_config_accepts_zero_noise_and_delay_and_negative_altitude():
+    config = EpisodeConfig(
+        reset_position_std_m=0.0,
+        reset_velocity_std_m_s=0.0,
+        reset_attitude_std_rad=0.0,
+        reset_rate_std_rad_s=0.0,
+        observation_delay_steps=0,
+        action_delay_range=(0, 0),
+        crash_altitude_m=-100.0,
+    )
+    assert config.substeps == 10 and config.max_action_delay == 0
+
+
 @pytest.fixture(scope="module")
 def setup():
     model = aerobatic_reference()
@@ -95,6 +144,23 @@ def test_crash_and_horizon_terminate(setup):
     _, _, reward, done, info = step(model, config, task, reference, at_horizon, action)
     assert bool(done) and bool(info["truncated"]) and not bool(info["crashed"])
     assert float(reward) > 0.0
+
+
+@pytest.mark.parametrize("upright_limit", [np.pi, 2.0 * np.pi])
+def test_upright_limit_at_or_above_pi_allows_inverted_flight(setup, upright_limit):
+    model, _, task, reference = setup
+    config = EpisodeConfig(upright_limit_rad=upright_limit)
+    state, _ = reset(model, config, task, reference, jax.random.PRNGKey(2))
+    inverted = state._replace(
+        aircraft=state.aircraft._replace(
+            rigid_body=state.aircraft.rigid_body._replace(attitude=jnp.array([1.0, 0.0, 0.0, 0.0]))
+        )
+    )
+    action = control_to_action(config, reference.control)
+    _, _, _, _, info = step(model, config, task, reference, inverted, action)
+    assert not bool(info["crashed"])
+    _, _, _, _, limited_info = step(model, EpisodeConfig(), task, reference, inverted, action)
+    assert bool(limited_info["crashed"])
 
 
 def test_return_is_differentiable_in_the_actions(setup):

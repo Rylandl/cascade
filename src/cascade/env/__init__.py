@@ -1,7 +1,13 @@
 """Episode environments over the functional core: tasks, sensors, episode functions, baseline
 policies, families of airframes, and weather. See ``docs/environments.md``."""
 
-from cascade.env.baselines import cascade_policy, transition_policy
+from cascade.env.baselines import (
+    ObservationCascadeState,
+    SensorObservation,
+    cascade_policy,
+    observation_cascade_policy,
+    transition_policy,
+)
 from cascade.env.episode import (
     OBSERVATION_FIXED_SIZE,
     EnvState,
@@ -27,14 +33,28 @@ from cascade.env.gusts import (
     dryden_low_altitude,
     dryden_wind_sequence,
 )
+from cascade.env.missions import (
+    MissionTarget,
+    OrbitTask,
+    ScheduledTrackingTask,
+    WaypointTask,
+    orbit_task,
+    scheduled_tracking_task,
+    waypoint_task,
+)
 from cascade.env.randomisation import Randomisation, randomisation, sample_models
 from cascade.env.sensors import (
     ObservationSpec,
+    SensorBlockConfig,
     SensorNoise,
+    SensorPipelineConfig,
+    SensorState,
     full_observation,
+    initialize_sensor_pipeline,
     onboard_observation,
     sensor_noise,
     sensor_noise_from_sensors,
+    step_sensor_pipeline,
 )
 from cascade.env.tasks import (
     HoverTask,
@@ -46,6 +66,7 @@ from cascade.env.tasks import (
     hover_reference,
     hover_task,
     reference_speed,
+    task_at,
     tracking_task,
     transition_task,
     trimmed_reference,
@@ -61,6 +82,22 @@ from cascade.env.weather import (
 )
 
 __all__ = [
+    "ObservationCascadeState",
+    "SensorObservation",
+    "observation_cascade_policy",
+    "MissionTarget",
+    "OrbitTask",
+    "ScheduledTrackingTask",
+    "WaypointTask",
+    "orbit_task",
+    "scheduled_tracking_task",
+    "waypoint_task",
+    "task_at",
+    "SensorBlockConfig",
+    "SensorPipelineConfig",
+    "SensorState",
+    "initialize_sensor_pipeline",
+    "step_sensor_pipeline",
     "DrydenParameters",
     "EnvState",
     "EpisodeConfig",

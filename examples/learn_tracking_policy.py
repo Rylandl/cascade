@@ -3,11 +3,15 @@
 A small policy network is initialised at the trim action and trained by ascending the episode
 return with the gradient taken straight through :func:`cascade.env.rollout_policy`: the plant,
 the actuators, the stall dynamics, and the policy are one differentiable program. On the
-aerobatic reference's 12 m/s tracking task from perturbed starts, sixty steps match the
-hand-tuned control cascade. No replay buffer, no critic, no reward model.
+aerobatic reference's 12 m/s tracking task from perturbed starts, the example compares sixty
+training steps with the hand-tuned control cascade on separate evaluation seeds. This is one
+seeded simulator experiment, not a general sample-efficiency claim.
 """
 
+import argparse
+import json
 import time
+from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -18,12 +22,14 @@ from cascade.env import (
     action_size,
     cascade_policy,
     control_to_action,
+    observation_size,
     reset,
     rollout_policy,
     tracking_task,
     trimmed_reference,
 )
-from cascade.reference import aerobatic_reference
+from cascade.provenance import stamp
+from cascade.reference import aerobatic_reference_spec
 
 HORIZON = 160
 BATCH = 16
@@ -66,12 +72,16 @@ def adam_ascent(params, first, second, gradient, iteration):
 
 
 def main() -> None:
-    model = aerobatic_reference()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, help="write results and provenance as JSON")
+    args = parser.parse_args()
+    spec = aerobatic_reference_spec()
+    model = spec.to_model()
     task = tracking_task(12.0, 50.0, 0.0)
     reference = trimmed_reference(model, task)
     config = EpisodeConfig(horizon_steps=HORIZON)
     trim_action = control_to_action(config, reference.control)
-    observation_size = 17 + model.n_surfaces + model.n_propellers
+    observations = observation_size(model, config.observation)
 
     def episode_return(policy, policy_state, key):
         state, _ = reset(model, config, task, reference, key)
@@ -93,11 +103,13 @@ def main() -> None:
         return jnp.mean(jax.vmap(lambda key: episode_return(policy, policy_state, key))(keys))
 
     evaluation_keys = jax.random.split(jax.random.PRNGKey(999), 256)
-    params = initial_parameters(jax.random.PRNGKey(0), observation_size, action_size(model))
+    params = initial_parameters(jax.random.PRNGKey(0), observations, action_size(model))
     evaluate = jax.jit(mean_return)
     print(f"horizon {HORIZON} steps at {config.control_frequency_hz:.0f} Hz; max return {HORIZON}")
-    print(f"control cascade baseline: {float(jax.jit(baseline_return)(evaluation_keys)):7.2f}")
-    print(f"untrained policy (trim):  {float(evaluate(params, evaluation_keys)):7.2f}")
+    baseline = float(jax.jit(baseline_return)(evaluation_keys))
+    untrained = float(evaluate(params, evaluation_keys))
+    print(f"control cascade baseline: {baseline:7.2f}")
+    print(f"untrained policy (trim):  {untrained:7.2f}")
 
     value_and_grad = jax.jit(jax.value_and_grad(mean_return))
     first = jax.tree.map(jnp.zeros_like, params)
@@ -113,7 +125,29 @@ def main() -> None:
                 f"iteration {iteration:3d}  training return {float(value):7.2f}  "
                 f"gradient norm {float(norm):7.2f}  [{time.time() - start:3.0f} s]"
             )
-    print(f"trained policy:           {float(evaluate(params, evaluation_keys)):7.2f}")
+    trained = float(evaluate(params, evaluation_keys))
+    print(f"trained policy:           {trained:7.2f}")
+    if args.output:
+        record = {
+            "provenance": stamp(spec, model, seed=0),
+            "config": {
+                "horizon": HORIZON,
+                "training_batch": BATCH,
+                "iterations": ITERATIONS,
+                "hidden": HIDDEN,
+                "learning_rate": LEARNING_RATE,
+                "gradient_clip": GRADIENT_CLIP,
+                "training_keys": "PRNGKey(iteration), iterations 1..60",
+                "evaluation_seed": 999,
+                "evaluation_episodes": 256,
+                "control_frequency_hz": config.control_frequency_hz,
+                "simulation_frequency_hz": config.simulation_frequency_hz,
+            },
+            "returns": {"trim": untrained, "cascade": baseline, "learned": trained},
+            "training_and_final_evaluation_seconds": time.time() - start,
+        }
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(record, indent=2, allow_nan=False) + "\n")
 
 
 if __name__ == "__main__":

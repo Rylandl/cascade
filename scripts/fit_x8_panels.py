@@ -3,15 +3,15 @@
 The scientific question: can a component-panel model of the X8 flying wing, with its static
 coefficients fitted to the published coefficient polynomial (Gryte et al., ICUAS 2018, wind-tunnel
 column), reproduce the published rate derivatives (C_lp, C_mq, C_nr, C_Lq, C_Yp, C_Yr, C_lr, C_np)
-from geometry alone? Rate derivatives are never fitted; they are the test.
+from geometry and the fitted static coefficients? Rate derivatives are not direct fit targets.
 
 This script fits the shared per-panel static coefficients of ``skywalker_x8_panels.toml`` (lift,
 drag, and pitching-moment polynomials, plus the outer panels' flap terms and the winglets' lift
 slope and zero drag) so that ``aerodynamic_sweep`` of the panel model matches the body-block sweep
 of ``skywalker_x8_spec()`` over an alpha/beta/aileron/elevator grid at 18 m/s and zero rates.
-Positions and everything that affects rate derivatives are left untouched. It then evaluates both
-models' rate derivatives from small body rates and reports the comparison; the panel numbers are
-predictions from geometry, reported honestly whatever they are.
+Positions are fixed, but the fitted static slopes and moments also affect rate response. It then
+evaluates both models' rate derivatives from small body rates and reports the comparison; these
+are predictions of the statically fitted component model, not independent geometry-only results.
 
 Run ``uv run python scripts/fit_x8_panels.py``. It rewrites the fitted values into
 ``src/cascade/aircraft/skywalker_x8_panels.toml``. See ``docs/skywalker-x8.md``.
@@ -49,7 +49,8 @@ BASE_DESCRIPTION = (
     "ICUAS 2022). Mass, inertia, reference block, and propeller are copied from "
     "skywalker_x8.toml. Static per-panel coefficients are fitted by scripts/fit_x8_panels.py to "
     "reproduce the published body-block static polynomial (Gryte et al. wind-tunnel column); "
-    "positions and all rate-affecting quantities are geometry, not fitted, so C_lp, C_mq, C_nr, "
+    "positions are fixed geometry, but fitted static slopes and moments also affect rates; "
+    "rate derivatives are not direct fit targets, so C_lp, C_mq, C_nr, "
     "C_Lq, C_Yp, C_Yr, C_lr, C_np are predictions to compare against the published XFLR5 values. "
     "See docs/skywalker-x8.md for the fit residuals and rate-derivative comparison."
 )

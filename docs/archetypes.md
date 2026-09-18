@@ -2,9 +2,9 @@
 
 `cascade.design.archetypes` turns a handful of design decisions into a full aircraft specification on
 the panel backend, and `cascade.control.autotune` tunes the control cascade for any specification from
-its own trim and linearisation. Together they produce a family of visibly different, flyable
-airframes, each with a reference controller no human tuned, whose parameters a learner never
-sees. The designs are plausible, not validated against real aircraft; their job is diversity.
+its own trim and linearisation. Together they generate varied simulated airframes and reference
+controllers, using the design rules and tuning heuristics described below. The designs are
+plausible software fixtures, not validated against real aircraft; their job is diversity.
 
 ## Designs
 
@@ -32,8 +32,7 @@ Textbook, and stated in the code:
   included, with its effectiveness reduced by the wing's downwash slope `2 CL_alpha / (pi AR)`).
   The tail itself keeps its full lift slope and sees the wing's downwash through the spec's
   `downwash_map`, so pitch damping and elevator power are not reduced along with the static
-  stability (an earlier version folded the downwash into the slope; the nominal design's
-  pitch authority rose 15% when the map replaced it).
+  stability.
 - Tail volume coefficients and tail arm size the tails; a V-tail is two tilted panels carrying
   the horizontal and vertical volumes with a ruddervator mix in the control map.
 - Propwash weights from how much of each panel the disk covers; the propeller's static thrust
@@ -47,15 +46,23 @@ Textbook, and stated in the code:
 ## Validation
 
 `validate_design(design)` trims at cruise, linearises, and returns a `DesignReport`. A design
-passes when it trims within limits and 3° below stall, has pitch and roll authority above
-15 rad/s² per unit channel (yaw above 3 with a rudder), and has no unstable mode faster than
-a spiral. Authority is the Jacobian of angular acceleration with respect to the channels with
-the surfaces at their steady deflection (`control_authority`), so actuator lag does not hide
-it. From the default ranges about 9 in 10 sampled designs of either archetype pass; the rest
-fail at trim or stall margin (flying wings) or at tail authority (conventional).
+passes when it trims within limits and 3° below stall, has pitch and roll authority of at least
+15 rad/s² per unit channel (yaw at least 3 with a rudder), and has no unstable mode with a time
+constant under 2 s. Authority is the Jacobian of angular acceleration with respect to the channels,
+with the surfaces at their steady deflection (`control_authority`), so actuator lag does not hide
+it. These are internal screening criteria, not certification or evidence of real-aircraft stability.
 
-`scripts/archetype_statistics.py` emits these numbers. Sampled families are visibly diverse: across 40 designs per archetype the cruise speed spans
-8 to 23 m/s, the short-period frequency 0.9 to 3.4 Hz, and pitch authority 23 to 540 rad/s².
+`python scripts/archetype_statistics.py 40` uses key 0 and the default ranges. The recorded
+Python 3.13.11 / JAX 0.11.1 CPU float32 run produced the following ranges among passing designs:
+
+| archetype | pass count | cruise m/s | short-period Hz | pitch authority rad/s² per unit channel |
+| --- | ---: | ---: | ---: | ---: |
+| flying wing | 36/40 | 7.90–20.24 | 1.13–3.36 | 90.23–479.09 |
+| conventional | 38/40 | 7.95–23.00 | 0.86–2.83 | 27.85–240.11 |
+
+Flying-wing rejection reasons included trim, stall margin, and a fast unstable mode;
+conventional rejections involved tail authority. A design can have multiple reasons. These
+results characterize this finite seeded sample; changing ranges or seeds changes the population.
 
 ## Automatic tuning
 
@@ -69,8 +76,11 @@ the sign of the measured authority, so a reversed control map tunes itself. `ste
 flies a 0.5 rad heading step and a 5 m altitude step from the trim and reports whether the
 cascade settles.
 
-The tuner settles the two packaged aircraft and all four nominal archetypes within 1° of
-heading and 0.15 m of altitude, and generalises to sampled designs (`tests/test_autotune.py`).
+`tests/test_autotune.py` exercises the aerobatic and X8 fixtures plus four nominal layouts,
+then a fixed sampled set. Its settling criterion is heading error below 5°, altitude error
+below 1.5 m, and airspeed error below 2 m/s after the default 12 s maneuver; the sampled test
+requires at least 80% of the screened cases to meet that criterion. This finite regression
+coverage does not promise successful tuning for every generated design.
 `examples/archetypes.py` prints a table of sampled designs, their reports, and their tuned
 gains.
 

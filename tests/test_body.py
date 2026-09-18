@@ -1,6 +1,7 @@
 from dataclasses import replace
 
 import jax.numpy as jnp
+import pytest
 
 from cascade.dynamics import evaluate_dynamics
 from cascade.initialization import standard_environment, zero_control, zero_state
@@ -204,6 +205,7 @@ def test_body_spec_round_trips_through_toml(tmp_path):
         normal_force_coefficient=2.0,
         pitch_flat_plate=-0.2,
         deflection_map=((1.0, 0.0, 0.0, 0.0), (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0)),
+        reference_position_m=(-0.05, 0.01, 0.02),
     )
     spec = replace(base, body=body)
     path = tmp_path / "with_body.toml"
@@ -213,3 +215,50 @@ def test_body_spec_round_trips_through_toml(tmp_path):
 
     assert loaded == spec
     assert float(loaded.to_model().body.lift.alpha) == 4.0
+    assert jnp.allclose(loaded.to_model().body.reference_position, jnp.array([-0.05, 0.01, 0.02]))
+
+
+def test_body_reference_is_backwards_compatible_and_validates_shape():
+    from cascade.reference import skywalker_x8_spec
+
+    body = skywalker_x8_spec().body
+    legacy = body.to_dict()
+    legacy.pop("reference_position_m")
+    assert BodySpec.from_dict(legacy).reference_position_m == (0.0, 0.0, 0.0)
+    model = coefficient_only_model()
+    invalid = model._replace(body=model.body._replace(reference_position=jnp.zeros(2)))
+    with pytest.raises(ValueError, match="reference_position"):
+        validate_model(invalid)
+
+
+def test_nonzero_coefficient_reference_uses_local_flow_and_translates_moments():
+    model = coefficient_only_model()
+    reference = jnp.array([-0.1, 0.05, 0.02])
+    rates = jnp.array([0.2, -0.3, 0.4])
+    velocity = jnp.array([12.0, 0.3, 0.5])
+    expected = evaluate(model, velocity + jnp.cross(rates, reference), rates=rates).aerodynamics
+    offset_model = model._replace(body=model.body._replace(reference_position=reference))
+    result = evaluate(offset_model, velocity, rates=rates).aerodynamics
+    assert jnp.allclose(result.force_body, expected.force_body, rtol=1e-6, atol=1e-6)
+    assert jnp.allclose(
+        result.moment_body,
+        expected.moment_body + jnp.cross(reference, expected.force_body),
+        rtol=1e-6,
+        atol=1e-6,
+    )
+
+
+def test_coefficient_reference_changes_provenance_and_legacy_default_normalizes():
+    from cascade.provenance import model_hash, spec_hash
+    from cascade.reference import skywalker_x8_spec
+    from cascade.spec import AircraftSpec
+
+    spec = skywalker_x8_spec()
+    legacy = spec.to_dict()
+    legacy["body"].pop("reference_position_m")
+    restored = AircraftSpec.from_dict(legacy)
+    assert spec_hash(restored) == spec_hash(spec)
+    assert model_hash(restored.to_model()) == model_hash(spec.to_model())
+    shifted = replace(spec, body=replace(spec.body, reference_position_m=(-0.05, 0.0, 0.0)))
+    assert spec_hash(shifted) != spec_hash(spec)
+    assert model_hash(shifted.to_model()) != model_hash(spec.to_model())

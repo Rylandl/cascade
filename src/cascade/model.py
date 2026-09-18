@@ -109,13 +109,15 @@ class LateralCoefficients(NamedTuple):
 
 
 class BodyModel(NamedTuple):
-    """Whole-aircraft polynomial aerodynamics about the center of mass.
+    """Whole-aircraft polynomial aerodynamics about a fixed aircraft reference point.
 
     This is the classical Beard and McLain coefficient form used by published small-UAV models.
-    It is evaluated from the air velocity at the center of mass and added to the component
+    It is evaluated from the air velocity at its reference point and added to the component
     surfaces, so an aircraft can be described by a coefficient table alone (with zero-area
     surfaces carrying its physical actuators), by components alone, or by a mix. All entries
-    are per-world scalars except ``deflection_map`` with shape ``[3, S]``, which forms the
+    are per-world scalars except ``reference_position`` with shape ``[3]`` (body-axis metres
+    from the center of mass to the coefficient reference) and ``deflection_map`` with shape
+    ``[3, S]``, which forms the
     generalized aileron, elevator, and rudder angles from the physical surface deflections.
     Static angle-of-attack polynomials blend beyond ``stall_angle`` to a flat plate with
     ``normal_force_coefficient`` (about 2 for a thin plate) and ``pitch_flat_plate``.
@@ -132,6 +134,7 @@ class BodyModel(NamedTuple):
     normal_force_coefficient: Array
     pitch_flat_plate: Array
     deflection_map: Array
+    reference_position: Array = jnp.zeros(3)
 
 
 def zero_body(n_surfaces: int) -> BodyModel:
@@ -152,6 +155,7 @@ def zero_body(n_surfaces: int) -> BodyModel:
         normal_force_coefficient=zero,
         pitch_flat_plate=zero,
         deflection_map=jnp.zeros((3, n_surfaces)),
+        reference_position=jnp.zeros(3),
     )
 
 
@@ -275,13 +279,15 @@ def validate_model(model: AircraftModel) -> AircraftModel:
 
     body = model.body
     for name, group in zip(BodyModel._fields, body, strict=True):
-        if name == "deflection_map":
+        if name in ("deflection_map", "reference_position"):
             continue
         for leaf in jax.tree.leaves(group):
             if leaf.shape != ():
                 raise ValueError(f"body.{name} coefficients must be scalars, got {leaf.shape}")
     if body.deflection_map.shape != (3, n_surface):
         raise ValueError("body.deflection_map must have shape (3, S)")
+    if body.reference_position.shape != (3,):
+        raise ValueError("body.reference_position must have shape (3,)")
 
     arrays = jax.tree.leaves(model)
     if not all(np.all(np.isfinite(np.asarray(jax.device_get(value)))) for value in arrays):

@@ -264,16 +264,21 @@ def body_aerodynamics(
 
     Forces are formed in the wind frame from ``C_L``, ``C_D``, ``C_Y`` and rotated to the body
     with the standard wind-to-body rotation; moments are ``q S b C_l``, ``q S c C_m``,
-    ``q S b C_n`` directly in body axes. Rate terms are written with one power of airspeed
+    ``q S b C_n`` at the coefficient reference, translated to the center of mass by ``r x F``.
+    Air velocity is evaluated at that reference, including ``omega x r``. Rate terms are
+    written with one power of airspeed
     fewer so that the ``1 / V_a`` of the non-dimensional rate never appears and the block is
     finite at rest. Slipstream does not reach the body block; it belongs to component surfaces.
     """
 
     body = model.body
+    reference_velocity = air_velocity_body + jnp.cross(
+        state.rigid_body.angular_velocity, body.reference_position, axis=-1
+    )
     axial, spanwise, normal = (
-        air_velocity_body[..., 0],
-        air_velocity_body[..., 1],
-        air_velocity_body[..., 2],
+        reference_velocity[..., 0],
+        reference_velocity[..., 1],
+        reference_velocity[..., 2],
     )
     planar_speed_squared = jnp.square(axial) + jnp.square(normal)
     planar_speed = jnp.sqrt(planar_speed_squared + 1e-8)
@@ -353,6 +358,7 @@ def body_aerodynamics(
         axis=-1,
     )
     moment_body = jnp.stack((roll_moment, pitch_moment, yaw_moment), axis=-1)
+    moment_body = moment_body + jnp.cross(body.reference_position, force_body, axis=-1)
     # Diagnostic coefficients only (the forces above never divide by airspeed): report the
     # rate terms against an airspeed floored at 1 m/s so a near-hover sweep does not spike.
     reporting_speed = jnp.maximum(airspeed, 1.0)

@@ -1,12 +1,11 @@
-"""Export a policy for deployment with ``jax.export`` and check it against the JAX call.
+"""Serialize an example policy with ``jax.export`` and verify its JAX round trip.
 
 The learned tracking policy of ``learn_tracking_policy.py`` is a pure function of its
-parameters and the observation; ``jax.export`` lowers it to StableHLO, a serialised artifact
-that runs without Python or JAX at inference (through the XLA or IREE runtimes, or by
-conversion to ONNX). This example exports a policy with a fixed observation size, reloads the
-artifact, and checks the outputs agree bit for bit, which is the sim-versus-onboard check a
-deployment needs before a first flight. Serialisation needs the ``flatbuffers`` package
-(``uv run --with flatbuffers python examples/export_policy.py``; it is in the dev group).
+parameters and the observation. This example exports randomly initialized parameters for a
+fixed observation size, reloads the JAX Exported artifact containing StableHLO, and asserts
+numerical agreement across a seeded observation batch. It does not train a policy, run on
+onboard hardware, or validate another runtime. Export platform and JAX version compatibility
+still apply. Serialisation needs the ``export`` extra (flatbuffers; also in the dev group).
 """
 
 import sys
@@ -59,9 +58,12 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_bytes(exported.serialize())
     reloaded = export.deserialize(output.read_bytes())
-    observation = jax.random.normal(jax.random.fold_in(key, 2), (observation_size(model),))
-    expected = np.asarray(act(observation))
-    actual = np.asarray(reloaded.call(observation))
+    observations = jax.random.normal(jax.random.fold_in(key, 2), (32, observation_size(model)))
+    expected = np.asarray(jax.vmap(act)(observations))
+    # An Exported call does not expose a vmap batching rule on every supported JAX version.
+    # Exercise the serialized single-observation signature exactly as exported.
+    actual = np.stack([np.asarray(reloaded.call(observation)) for observation in observations])
+    np.testing.assert_allclose(actual, expected, rtol=1e-6, atol=1e-7)
     print(f"wrote {output} ({output.stat().st_size} bytes)")
     print(f"observation size {observation_size(model)}, action size {action_size(model)}")
     print(f"max |exported - jax| = {np.max(np.abs(actual - expected)):.2e}")

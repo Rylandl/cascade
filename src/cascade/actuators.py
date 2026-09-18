@@ -11,7 +11,9 @@ def actuator_targets(model: AircraftModel, control: ControlInput) -> ActuatorSta
 
     Channels are linear coordinates in the units the aircraft specification chose for its
     control map, so a specification may use normalized ``[-1, 1]`` commands or physical angles
-    in radians. Physical surface limits are enforced on the mapped angle.
+    in radians. Physical surface limits are enforced on the mapped angle. Propeller speed
+    limits bound the target; actual RPM follows it through the motor's lag and acceleration
+    limit, including when a fault lowers the target range below the current RPM.
     """
 
     actuators = model.actuators

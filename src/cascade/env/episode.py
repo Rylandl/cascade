@@ -6,7 +6,9 @@ differentiable through the episode.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from numbers import Integral, Real
 from typing import NamedTuple
 
 import jax
@@ -19,11 +21,15 @@ from cascade.env.sensors import (
     GRAVITY_SCALE_M_S2,
     ObservationSpec,
     SensorNoise,
+    SensorPipelineConfig,
+    SensorState,
     _noise_vectors,
     block_sizes,
+    initialize_sensor_pipeline,
     sensor_noise,
+    step_sensor_pipeline,
 )
-from cascade.env.tasks import ReferenceFlight, Task, reference_speed
+from cascade.env.tasks import ReferenceFlight, Task, reference_speed, task_at
 from cascade.env.weather import (
     WeatherCondition,
     discrete_gust_ned,
@@ -64,7 +70,10 @@ class EpisodeConfig:
     randomisable leaf; it overrides the fixed value. ``observation`` selects the blocks a
     policy sees (:class:`cascade.env.sensors.ObservationSpec`; everything by default).
     ``isa_density`` replaces the reference environment's density with the standard
-    atmosphere at the aircraft's altitude every period.
+    atmosphere at the aircraft's altitude every period. ``upright_limit_rad >= pi`` disables
+    attitude-based termination for hover, inverted flight, and full-attitude tasks.
+    ``sensors`` optionally adds block sample rates, random-walk bias, dropped packets,
+    and acquisition/transport jitter before the whole-observation delay.
     """
 
     simulation_frequency_hz: float = 400.0
@@ -83,23 +92,54 @@ class EpisodeConfig:
     observation: ObservationSpec = ObservationSpec()
     isa_density: bool = False
     step: StepFunction = rk4_step
+    sensors: SensorPipelineConfig | None = None
 
     def __post_init__(self) -> None:
+        for name in ("simulation_frequency_hz", "control_frequency_hz", "channel_scale"):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not math.isfinite(value)
+                or value <= 0.0
+            ):
+                raise ValueError(f"{name} must be a finite positive number")
         ratio = self.simulation_frequency_hz / self.control_frequency_hz
-        if abs(ratio - round(ratio)) > 1e-9 or ratio < 1.0:
+        if not math.isfinite(ratio) or abs(ratio - round(ratio)) > 1e-9 or ratio < 1.0:
             raise ValueError(
                 "simulation frequency must be an integer multiple of control frequency"
             )
-        if self.horizon_steps <= 0:
-            raise ValueError("horizon_steps must be positive")
-        if self.observation_delay_steps < 0:
-            raise ValueError("observation_delay_steps must be non-negative")
-        if self.action_delay_steps < 0:
-            raise ValueError("action_delay_steps must be non-negative")
+        for name in ("horizon_steps", "observation_delay_steps", "action_delay_steps"):
+            value = getattr(self, name)
+            minimum = 1 if name == "horizon_steps" else 0
+            if isinstance(value, bool) or not isinstance(value, Integral) or value < minimum:
+                raise ValueError(f"{name} must be an integer >= {minimum}")
         if self.action_delay_range is not None:
-            low, high = self.action_delay_range
-            if low < 0 or high < low:
-                raise ValueError("action_delay_range must be 0 <= low <= high")
+            bounds = self.action_delay_range
+            if (
+                not isinstance(bounds, tuple)
+                or len(bounds) != 2
+                or any(isinstance(v, bool) or not isinstance(v, Integral) for v in bounds)
+                or not 0 <= bounds[0] <= bounds[1]
+            ):
+                raise ValueError("action_delay_range must be integer bounds 0 <= low <= high")
+        for name in (
+            "reset_position_std_m",
+            "reset_velocity_std_m_s",
+            "reset_attitude_std_rad",
+            "reset_rate_std_rad_s",
+            "upright_limit_rad",
+            "crash_altitude_m",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
+                raise ValueError(f"{name} must be finite")
+            if name != "crash_altitude_m" and value < 0.0:
+                raise ValueError(f"{name} must be non-negative")
+        if not callable(self.step):
+            raise ValueError("step must be a callable integration function")
+        if self.sensors is not None and not isinstance(self.sensors, SensorPipelineConfig):
+            raise ValueError("sensors must be a SensorPipelineConfig or None")
 
     @property
     def max_action_delay(self) -> int:
@@ -117,6 +157,14 @@ class EpisodeConfig:
 
 
 class EnvState(NamedTuple):
+    """Episode state, including delivered-measurement metadata.
+
+    ``sensor_age_s`` and ``sensor_valid`` follow the observation layout and describe
+    ``observation_buffer[0]`` after all delays. An unavailable measurement has age
+    infinity, validity false, and value zero. Held measurements remain valid while
+    their ages increase. ``sensor_state`` is present only with a sensor pipeline.
+    """
+
     aircraft: AircraftState
     step: Array
     key: Array
@@ -127,6 +175,12 @@ class EnvState(NamedTuple):
     action_buffer: Array
     action_delay: Array
     density: Array
+    time_s: Array
+    sensor_state: SensorState | None
+    observation_sample_step_buffer: Array
+    observation_valid_buffer: Array
+    sensor_age_s: Array
+    sensor_valid: Array
 
 
 def current_environment(reference: ReferenceFlight, state: EnvState) -> Environment:
@@ -163,6 +217,8 @@ def reset(
     ``weather`` (default the reference's own wind, usually none) sets the mean wind profile
     and turbulence for the episode; the initial ground velocity is shifted by the wind at the
     start altitude so the aircraft begins at its trimmed airspeed.
+    A configured sensor pipeline acquires at time zero; blocks with transport delay
+    or an initial dropout return zero until delivery, marked invalid in the state.
     """
 
     noise = sensor_noise() if noise is None else noise
@@ -207,8 +263,35 @@ def reset(
         ),
         action_delay=_draw_action_delay(config, k_delay),
         density=_density(config, reference, -position[..., 2]),
+        time_s=jnp.zeros(()),
+        sensor_state=None,
+        observation_sample_step_buffer=jnp.zeros(
+            (config.observation_delay_steps + 1, white.shape[0]), jnp.int32
+        ),
+        observation_valid_buffer=jnp.ones(
+            (config.observation_delay_steps + 1, white.shape[0]), bool
+        ),
+        sensor_age_s=jnp.zeros_like(white),
+        sensor_valid=jnp.ones(white.shape, bool),
     )
     sensed = _sense(model, task, reference, partial, white, k_noise, config.observation)
+    if config.sensors is not None:
+        pipeline = initialize_sensor_pipeline(
+            model, config.sensors, config.observation, sensed, jax.random.fold_in(k_noise, 1)
+        )
+        sensed = pipeline.reading
+        partial = partial._replace(
+            sensor_state=pipeline,
+            observation_sample_step_buffer=jnp.broadcast_to(
+                pipeline.sample_step,
+                partial.observation_sample_step_buffer.shape,
+            ),
+            observation_valid_buffer=jnp.broadcast_to(
+                pipeline.valid, partial.observation_valid_buffer.shape
+            ),
+            sensor_valid=pipeline.valid,
+            sensor_age_s=jnp.where(pipeline.valid, 0.0, jnp.inf),
+        )
     buffer = jnp.broadcast_to(sensed, partial.observation_buffer.shape)
     state = partial._replace(observation_buffer=buffer)
     return state, buffer[0]
@@ -254,6 +337,7 @@ def observation(
 
     spec = ObservationSpec() if spec is None else spec
     rigid = state.aircraft.rigid_body
+    task = task_at(task, state.time_s, rigid)
     environment = current_environment(reference, state)
     air_body = quaternion_rotate_inverse(rigid.attitude, rigid.velocity - environment.wind)
     airspeed = safe_norm(air_body)
@@ -391,6 +475,9 @@ def step(
     ``done`` is true on a crash (below ``crash_altitude_m``), on leaving the upright envelope
     (the body down axis more than ``upright_limit_rad`` from gravity), or at the horizon; the
     info dict separates ``crashed`` and ``truncated`` and reports the cost.
+    ``sensor_age_s``/``sensor_valid`` describe each returned observation element;
+    ``sensor_sampled``/``sensor_dropped`` describe acquisition attempts on this tick
+    before the whole-observation delay. Ages include all configured delays.
     """
 
     # The commanded action enters the buffer; the one applied is from ``action_delay``
@@ -414,14 +501,14 @@ def step(
         step=config.step,
     )
     rigid = aircraft.rigid_body
-    cost = task.cost(rigid, environment, action)
+    next_step = state.step + 1
+    next_time = next_step / config.control_frequency_hz
     down_body = quaternion_rotate_inverse(rigid.attitude, normalize(reference.environment.gravity))
-    crashed = (-rigid.position[..., 2] < config.crash_altitude_m) | (
+    attitude_crash = (config.upright_limit_rad < math.pi) & (
         down_body[..., 2] < jnp.cos(config.upright_limit_rad)
     )
-    next_step = state.step + 1
+    crashed = (-rigid.position[..., 2] < config.crash_altitude_m) | attitude_crash
     truncated = next_step >= config.horizon_steps
-    reward = jnp.where(crashed, 0.0, jnp.exp(-cost))
     noise = sensor_noise() if noise is None else noise
     key, k_noise, k_gust = jax.random.split(state.key, 3)
     white, _ = _noise_vectors(model, noise, config.observation)
@@ -451,11 +538,63 @@ def step(
         wind_ned=wind,
         action_buffer=action_buffer,
         density=_density(config, reference, -rigid.position[..., 2]),
+        time_s=next_time,
     )
+    active_task = task_at(task, next_time, rigid)
+    cost = active_task.cost(rigid, current_environment(reference, advanced), action)
+    reward = jnp.where(crashed, 0.0, jnp.exp(-cost))
     sensed = _sense(model, task, reference, advanced, white, k_noise, config.observation)
+    pipeline = state.sensor_state
+    if config.sensors is not None:
+        if pipeline is None:
+            raise ValueError("reset must use the same sensor pipeline configuration as step")
+        pipeline = step_sensor_pipeline(
+            model,
+            config.sensors,
+            config.observation,
+            pipeline,
+            sensed,
+            jax.random.fold_in(k_noise, 1),
+            1.0 / config.control_frequency_hz,
+        )
+        sensed = pipeline.reading
+        sample_step = pipeline.sample_step
+        valid = pipeline.valid
+        sampled, dropped = pipeline.sampled, pipeline.dropped
+    else:
+        if pipeline is not None:
+            raise ValueError("reset must use the same sensor pipeline configuration as step")
+        sample_step = jnp.full(sensed.shape, next_step, jnp.int32)
+        valid = jnp.ones(sensed.shape, bool)
+        sampled, dropped = valid, jnp.zeros_like(valid)
     buffer = jnp.concatenate((state.observation_buffer[1:], sensed[None]), axis=0)
-    next_state = advanced._replace(observation_buffer=buffer)
-    info = {"cost": cost, "crashed": crashed, "truncated": truncated, "applied_action": applied}
+    sample_buffer = jnp.concatenate(
+        (state.observation_sample_step_buffer[1:], sample_step[None]), axis=0
+    )
+    valid_buffer = jnp.concatenate((state.observation_valid_buffer[1:], valid[None]), axis=0)
+    age = jnp.where(
+        valid_buffer[0], (next_step - sample_buffer[0]) / config.control_frequency_hz, jnp.inf
+    )
+    fresh = valid_buffer[0] & (sample_buffer[0] > state.observation_sample_step_buffer[0])
+    next_state = advanced._replace(
+        observation_buffer=buffer,
+        sensor_state=pipeline,
+        observation_sample_step_buffer=sample_buffer,
+        observation_valid_buffer=valid_buffer,
+        sensor_age_s=age,
+        sensor_valid=valid_buffer[0],
+    )
+    info = {
+        "cost": cost,
+        "crashed": crashed,
+        "truncated": truncated,
+        "applied_action": applied,
+        "sensor_age_s": age,
+        "sensor_valid": valid_buffer[0],
+        "sensor_fresh": fresh,
+        "sensor_sampled": sampled,
+        "sensor_dropped": dropped,
+    }
     return next_state, buffer[0], reward, crashed | truncated, info
 
 
