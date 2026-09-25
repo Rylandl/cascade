@@ -59,6 +59,12 @@ include fit diagnostics and provenance, and can be scored on validation/evaluati
 Run `uv run python examples/calibrate_aircraft.py --output dist/synthetic-calibration`
 for a synthetic parameter-recovery example.
 
+The optional [JSBSim comparison harness](docs/jsbsim-validation.md) checks independent
+force evaluation, trim balance, maneuver trajectories and synthetic calibration for the
+X8 and reference airframes. Install the `validation` extra and run
+`JAX_ENABLE_X64=1 uv run --extra validation python -m cascade.validation dist/jsbsim-check`.
+This verifies shared model implementations; it does not establish measured-flight accuracy.
+
 Quick test run: `uv run --frozen pytest -m "not slow"` (the full suite takes several minutes).
 
 See [the architecture document](docs/architecture.md) for scope, equations, extension points,

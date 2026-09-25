@@ -1,0 +1,394 @@
+{
+  "date": "2026-09-25",
+  "full_results_sha256": "976e085544727d8edead966a550290fb6f995e053bec4dd2d5af8af6aaaac2a2",
+  "implementation_sha256": {
+    "__init__.py": "8d05f6c465df24a5db724f806aca5a7b868ad738c76a389440f25dd61dd59df4",
+    "_typing.py": "f8c2d8f7fb81ec0067736c6377b6a164c18d3e2234d3f4aadce3ec4607cc909a",
+    "actuators.py": "f422d9c8dc8a39ceba79378c6915d48657108d58b59183de91384e83ac0f8bb6",
+    "aerodynamics.py": "c54bc4c831d0bb23a34284615ad8b0ce2dea774d1ccdf80fa12eb6c1d1032a78",
+    "aircraft/__init__.py": "0ca9d55c9ff2a3593c5ad27ba0f20edd0f4ca3025a07b3acfc0ef4fc8119a69c",
+    "analysis/__init__.py": "a8ac5a563574b75e7871c08e1bac58dd4bbabe3b817b0fc417d0d0409baf2e02",
+    "analysis/authority.py": "0f239236e58aac5d5d1079609e75695de4e721b0765e9075e499b0a4ed014712",
+    "analysis/coordinates.py": "9fcc75fe03bb6f705dfc16fd3084cdf5ed5a916cde19d2f29353c75483fafc0c",
+    "analysis/linearize.py": "725b9f2eebedde5e9ba66b0a9b4a0679e2b4984855b3f72ee68006ddbe7d47b2",
+    "analysis/sweep.py": "61d7781f7440fccf9652b7796eb11b2b12b0adb3ec6c56159179d145d11f2e32",
+    "analysis/trim.py": "f560b482614a29f108b067c2a7c3bef342e0e60c3681bcb628cccb85a584de95",
+    "analysis/turn_trim.py": "52df50e41d2ba9b237b032514b35988268ed216aaa06dd57f5fa234dd6b224c8",
+    "archetypes.py": "fadc3e72418964725c61fbb052ae1b274b06a04fa168e89ecef236609aabcb9d",
+    "autotune.py": "0f176e60a64aabe92b05eb1578f9d6b47733976a94553dfc54f349f7f2eafa37",
+    "calibration/__init__.py": "c65855df4b59945a46424213eea7602ebfe99e8d40a4a03f97277cf725d65c2d",
+    "calibration/__main__.py": "6271c291fa6659f912332880d3f8ddf0f6414ae0e293f6315121cbb51fbadd29",
+    "calibration/artifacts.py": "339d421fb023773228dcdbbd4ccfbf9480ceb07ef306b8933fba27ee3a828ff6",
+    "calibration/fitting.py": "49726083de4e29ac17c96e710a0f2daac328e5ee5bb0838f43ad411da75e20a2",
+    "calibration/parameters.py": "ea262c36977e184a03a94b427a4d86fa801c3585ef2a81bf4f50213dbea15710",
+    "calibration/workflow.py": "aa5547f4d1ff2f26efac9965cc0bba78123146d0d8ee44df8881dcbcb9c74680",
+    "canonical.py": "5c0a76da329ba8f1c3e52315f3e424d3c0462137b5faa0def70ffc7fe1c5e98a",
+    "control/__init__.py": "19aba4a8967f26f92a9ebd6913003454e287479469b417d3d18606653d50f123",
+    "control/autotune.py": "246002cf6d8e93cf7afd167f5ddf9d5700c86a13ebb45093337a5ebaa593acfd",
+    "control/loops.py": "18ad97598297481343cce80df278359dc928e6291907f172b19043bc9201996f",
+    "control/scheduling.py": "60c5efed87b152abb72c6afc41710c04e0ddde024a253629c498b0ac996f50ad",
+    "control/tuned.py": "754396695ebe011427b5ebb0cab01f0b379c272ea48a3d49496bacdce202d678",
+    "control/vtol.py": "086a9af61877ef36af9fca3409d004873516d8897456c3aec2e6150a1393e669",
+    "design/__init__.py": "95c881222fb33cd27a8b519badd00ee1e213bf0e8521e3e8f183b1b75c615300",
+    "design/archetypes.py": "775e49c5a43dd0eaa4f590d3c066b8e8af7eea81ba35a7432664e4b15a1934c8",
+    "dynamics.py": "f00bf1b6bb8e77daa7b1c0ea4d612218a7372333823de66727e29e6a70c771ef",
+    "env/__init__.py": "54b4ac25cd4744a096ad1a30b6c6ef38ad3234e3b4bed37008b7a80b29356bd2",
+    "env/baselines.py": "482eb0b3de96fe4a84abf67b3d05c0ecbb4115fe973c94b4a28027a19a995341",
+    "env/episode.py": "970cb81b9fecfe1c93e66d51a6f97bdc890d2ad5925512a632a22fdc1efdc2ed",
+    "env/family.py": "135c1f4327ca4ec18f462a8cf8ade471b6c5152b20f8a684974e89097427d45c",
+    "env/faults.py": "d15f6b2f109f10178380739f9fd30756a42135b1056afe29bf4a8ac1c48a6191",
+    "env/gusts.py": "2298e734ddf05a94f5ae52f60f127ea167a126db75a1f083e8e6d43e3f9f4b4e",
+    "env/missions.py": "9637d2bafcf61028a82c081e6b9df63c675b85fd8b591d8fc3a43e698e206b43",
+    "env/policies.py": "a880bce46dc95a4c7821d18d6ca36dc9e7b851c0bf63835371007ae394728f52",
+    "env/randomisation.py": "8b81ee6eaf603bf80ec0afa033fc0ea7bfc5df847042d8a847f7627e78459bce",
+    "env/sensors.py": "ceeec6caa5b371a902496be9a45f7e8ba77bf8817e00a5e012d4d6f58d927cff",
+    "env/tasks.py": "f88a0988d890bfbd41edc4b3c00d4459946ee359511f77c142aaf486e00308ff",
+    "env/weather.py": "86dccec33ddb6d898dd04f3ea32280e466470f2e05b3e06b344deb2489e31d99",
+    "experiments/__init__.py": "60979891f836b589b0ce55354df43b51a5e37297d14941c354ea8479c7ef9ab9",
+    "experiments/__main__.py": "ef64a2c3a78ba89a515b521369b401c9579e481a4ade2d97e41c0092a18d793d",
+    "experiments/flight_data.py": "f8baa9436be06e3367481cc360a11aad6435c225e8bdfa0cbae3dcfa67bd3fa1",
+    "experiments/manifest.py": "5b7063d630e6ec5e8a89854135fffaed8f63c6d9f488b22d768db59f2f6d5d8c",
+    "experiments/replay.py": "10f05127a33f838b950dbe6c697ae19341ce1b93e1c0e54932ab994b24d124da",
+    "experiments/runner.py": "63b3ee574d53408a213748996ddc120f114a4ddd1338ecc58886f9084d235925",
+    "family.py": "360ae98262bff85b3e4e1e635ec9f147fbc771233eda67cef54bc969f137abbf",
+    "geometry.py": "42ee548e706d8a65c0356ac4eb5e5ffb888bc3494dc55ca0f16db7ab04af3349",
+    "gusts.py": "0f7086979e1cc6f2dd3ac59c113aa21821829dbb3928d8ab1969c8c6f1a0e1ff",
+    "initialization.py": "2ab2f0a4a97364e96ce83c694640fb7da9011f3cbcbe38d6aecaf20190ca141d",
+    "integration.py": "822e370d35916a94bd1832b5bccb1ee9df03b9ebda1dc54897135075eb7cee7d",
+    "integrations/__init__.py": "344c9027d5113595e2dcf7252294126f294cfc9809ab018ccb2f11933822292c",
+    "integrations/gymnasium.py": "3c6ee32b307cf2796feb649d8a261f0c2a65527c4d7d6b3cabc50410652cc3e2",
+    "learning/__init__.py": "64faf00379f42be7c6cdb642e8f847d1f2a61512eb0aec655a70871be725bdb7",
+    "learning/__main__.py": "a8601c1b0e72e048cdf8476659a9e84a87ba869e9a7f5fe0c8212314913e2216",
+    "learning/checkpoint.py": "196eb5a759d7d997d255779592212db6bb189cb8faa12f02bcfa2d421b546732",
+    "learning/export.py": "b94399e451ebd644f9c5fed8eaba1d7fdff38d0a16e40e9a87e2c22aaedbe18a",
+    "learning/policies.py": "8e1eb666008bb619de02cc9d4b5cbc732780f4ca7663f8d3dc1bf6b39ce108a9",
+    "learning/training.py": "52c82ba0400e3dbb5892b57480ca8bf87755452bee24f1c12d28647cb0809bae",
+    "learning/workflow.py": "bd0997ae2eb0ec771245c091c45e488051aed612dfabd0205e3a8c2cf49ef1f6",
+    "math.py": "676255cc2f0f7a4adc03a03ca99bbd81222eab92c40a368ee1fffd05cc769217",
+    "model.py": "0d14afdbcb6110e321de809600265e1a58d86908fa554f7e1259cf6e0d4eb779",
+    "plant.py": "17779b297d0202e975a124ea387d21511357202a849fc6eea21a34bb9db145bd",
+    "provenance.py": "fd3cf44b09f986db07c9b2b2ebc338f3c3d092296d85eb81217ddca42f625d27",
+    "reference.py": "eba72439eb82e31c5114e42e2356eeeea9fecbc245fee634f78b432cfe86649e",
+    "render.py": "0ca10822d3d5d8fdbaa7676cb599d30a531e11dd1ade9c517d11ab1017cc85d8",
+    "spec.py": "11e3f2fc6b34dac80084ad2560e1e476f7c9cbd1366d9bc95e3f43e9dd737768",
+    "state.py": "471234a716a29d3d62aa907edec84fcd28d7f2f315259fbfcd39db112ac7767f",
+    "trajectory.py": "6f72f2a286fad804491a5b559ac944c39a3c30abb84e233bd9d2a96a41fa5de7",
+    "validation/__init__.py": "8cbda496624a3a15dab6a4bca0abea8c0d2be01dc1c6b7029bca525d58d4a378",
+    "validation/__main__.py": "0490c365c56996cda9b235f208807b8db1a84d351506d8925c8f5bfb01354f0f",
+    "validation/_xml.py": "006e62e33babf51706355563b60496c6d527f80228ecadc96aaa8a8a780df24b",
+    "validation/approximation.py": "ee4af6f3886921dd2d8f69fbaa21c52c0069bf3a6712fef04d8f13f79cbaa83a",
+    "validation/calibration.py": "61cd1eb868c54b52d2eb05dac8ce6386c984a93c0a9a495e3be9dad9ff777540",
+    "validation/campaign.py": "6809cc59599886dcff884007244090e8b77f4d1e2a6d86819e8298b2e1ea0fa5",
+    "validation/jsbsim.py": "66ace7bb66463f8e33ea0115c96aa7333187b89fc37116678a2e184534dabd01",
+    "viz/__init__.py": "aa968268456a6a469d2072085b8a0df714d3eb3ac0504df5d69e558eea529226",
+    "viz/geometry.py": "77b9b8c8fd8884ceb46d2c63e50606d7ffa03c38cd1304a97062946d9b64f603",
+    "viz/inspector.py": "8ccc0482f8243f794ac4150adce7fe3272df8c10c955cda5ae3beffbc135e504",
+    "viz/render.py": "9809f45204359be30a5294690cffa755866f6da48642ff7c3a18121cfa266909",
+    "vtol.py": "57006bdaedfcf36ff4ed012bc47a7bea857d6174b04d67e184b97a75aa6c9007",
+    "weather.py": "cb01a046be10d9243240e253d9d718dad0baa855d9aad78f6a98d2132703a9c1"
+  },
+  "models": {
+    "aerobatic": {
+      "all_convergence_checks_passed": true,
+      "calibration": {
+        "estimated": {
+          "inertia_scale": 1.1173695131587413,
+          "mass_kg": 1.2960146706073892
+        },
+        "heldout_velocity_error_ratios": {
+          "evaluation-0": 0.0005092689935000427,
+          "evaluation-1": 0.0005087186882379597
+        },
+        "optimizer": {
+          "message": "`gtol` termination condition is satisfied.",
+          "method": "scipy.optimize.least_squares",
+          "nfev": 5,
+          "njev": 5,
+          "optimality": 2.7098963041965776e-07,
+          "status": 1,
+          "success": true,
+          "tolerances": {
+            "ftol": 1e-06,
+            "gtol": 1e-06,
+            "xtol": 1e-06
+          }
+        },
+        "passed": true,
+        "relative_errors": {
+          "inertia_scale": 0.00234864896540965,
+          "mass_kg": 1.1319913108875923e-05
+        },
+        "truth": {
+          "inertia_scale": 1.12,
+          "mass_kg": 1.296
+        }
+      },
+      "flight_count": 4,
+      "maximum_fine_timestep_errors": {
+        "attitude_rmse_rad": 4.272124052780694e-05,
+        "position_rmse_m": 0.00016987382283010566,
+        "rate_rmse_rad_s": 0.00041272837176945686,
+        "velocity_rmse_m_s": 0.00015689097850490866
+      },
+      "passed": true,
+      "points": {
+        "cases": 41,
+        "maximum_errors": {
+          "acceleration_error_m_s2": 2.981355606834768e-08,
+          "angular_acceleration_error_rad_s2": 6.991740519879386e-12,
+          "equilibrium_error": 7.55506768257419e-14,
+          "scaled_load_error": 3.4967442873136933e-13
+        },
+        "passed": true
+      },
+      "spec_sha256": "7c379f2326364e6427a46ab94fa0c38707535da240abf813e0c756196c9f5669",
+      "trim": {
+        "cascade_success": true,
+        "decision": [
+          6.33348279729881e-05,
+          0.0858583224870147,
+          3.6369690472039843e-06,
+          0.5858312255611836,
+          0.019156956988241082,
+          -0.18820350289214352,
+          0.00023367594065245496
+        ],
+        "jsbsim_acceleration_m_s2": 2.981926509554553e-08,
+        "jsbsim_angular_acceleration_rad_s2": 6.139841542874982e-11,
+        "passed": true
+      }
+    },
+    "aerobatic-downwash": {
+      "all_convergence_checks_passed": true,
+      "flight_count": 4,
+      "maximum_fine_timestep_errors": {
+        "attitude_rmse_rad": 5.172177394614964e-05,
+        "position_rmse_m": 0.0006018081198089432,
+        "rate_rmse_rad_s": 0.00041296998273705445,
+        "velocity_rmse_m_s": 0.0007513916410924605
+      },
+      "passed": true,
+      "points": {
+        "cases": 41,
+        "maximum_errors": {
+          "acceleration_error_m_s2": 2.981337310359322e-08,
+          "angular_acceleration_error_rad_s2": 5.936584557275637e-12,
+          "equilibrium_error": 7.560618797697316e-14,
+          "scaled_load_error": 5.465050152971286e-13
+        },
+        "passed": true
+      },
+      "spec_sha256": "84823e1434c6722b1f28af5ea80b0c7ef1f5d2730cc0fe9995e73f0b6fb68108",
+      "trim": {
+        "cascade_success": true,
+        "decision": [
+          6.230792219464504e-05,
+          0.0859061827892719,
+          3.5706128872528444e-06,
+          0.583373841756285,
+          0.019009067524857457,
+          0.0957813717371759,
+          0.0002306773637814865
+        ],
+        "jsbsim_acceleration_m_s2": 2.9819087241242794e-08,
+        "jsbsim_angular_acceleration_rad_s2": 6.034524260649903e-11,
+        "passed": true
+      }
+    },
+    "tailsitter": {
+      "all_convergence_checks_passed": true,
+      "flight_count": 4,
+      "maximum_fine_timestep_errors": {
+        "attitude_rmse_rad": 0.00020693380890835717,
+        "position_rmse_m": 0.0007747767439493889,
+        "rate_rmse_rad_s": 0.0027299281404199434,
+        "velocity_rmse_m_s": 0.0014212227049464666
+      },
+      "passed": true,
+      "points": {
+        "cases": 41,
+        "maximum_errors": {
+          "acceleration_error_m_s2": 2.981355962106136e-08,
+          "angular_acceleration_error_rad_s2": 9.691802915767767e-12,
+          "equilibrium_error": 8.282263763703668e-14,
+          "scaled_load_error": 7.895431486897059e-14
+        },
+        "passed": true
+      },
+      "spec_sha256": "24c07799cd4085a72011e9b3ef19ddf86738477f1acd8bc8d09b27f1d4d6038b",
+      "trim": {
+        "cascade_success": true,
+        "decision": [
+          1.0738506551314027e-17,
+          0.10198296438163106,
+          -7.573717808992048e-18,
+          0.6434494735500131,
+          0.6434494735500131,
+          -1.4264241056020074e-17,
+          -0.08719175628982856
+        ],
+        "jsbsim_acceleration_m_s2": 2.9812175934516855e-08,
+        "jsbsim_angular_acceleration_rad_s2": 2.6005594799208573e-14,
+        "passed": true
+      }
+    },
+    "x8": {
+      "all_convergence_checks_passed": true,
+      "calibration": {
+        "estimated": {
+          "inertia_scale": 1.1178458037793395,
+          "mass_kg": 3.6330474470766316
+        },
+        "heldout_velocity_error_ratios": {
+          "evaluation-0": 0.0014436524673203796,
+          "evaluation-1": 0.0016938433905107255
+        },
+        "optimizer": {
+          "message": "`gtol` termination condition is satisfied.",
+          "method": "scipy.optimize.least_squares",
+          "nfev": 5,
+          "njev": 5,
+          "optimality": 7.399665209630731e-08,
+          "status": 1,
+          "success": true,
+          "tolerances": {
+            "ftol": 1e-06,
+            "gtol": 1e-06,
+            "xtol": 1e-06
+          }
+        },
+        "passed": true,
+        "relative_errors": {
+          "inertia_scale": 0.0019233894827326292,
+          "mass_kg": 1.9969867047664458e-05
+        },
+        "truth": {
+          "inertia_scale": 1.12,
+          "mass_kg": 3.63312
+        }
+      },
+      "flight_count": 4,
+      "maximum_fine_timestep_errors": {
+        "attitude_rmse_rad": 3.449191746965642e-05,
+        "position_rmse_m": 0.00024802273535933064,
+        "rate_rmse_rad_s": 0.00027836386097643517,
+        "velocity_rmse_m_s": 0.0007366810467808916
+      },
+      "passed": true,
+      "points": {
+        "cases": 41,
+        "maximum_errors": {
+          "acceleration_error_m_s2": 2.9818245650403696e-08,
+          "angular_acceleration_error_rad_s2": 6.693312570860144e-12,
+          "equilibrium_error": 7.599476603559197e-14,
+          "scaled_load_error": 6.602002101549946e-13
+        },
+        "passed": true
+      },
+      "spec_sha256": "e11f0f590a1baf1dd27e7e24e4ad4be6a2c70e72d003435a05d7b2ac8981386c",
+      "trim": {
+        "cascade_success": true,
+        "decision": [
+          -0.0002573912860215636,
+          0.024318616051493193,
+          -0.0005060000454046357,
+          0.4369888824329277,
+          0.004171881294513127,
+          0.13172665813461729
+        ],
+        "jsbsim_acceleration_m_s2": 2.9928724873805185e-08,
+        "jsbsim_angular_acceleration_rad_s2": 2.595369022179808e-10,
+        "passed": true
+      }
+    },
+    "x8-panels": {
+      "all_convergence_checks_passed": true,
+      "flight_count": 4,
+      "maximum_fine_timestep_errors": {
+        "attitude_rmse_rad": 4.38681323608816e-05,
+        "position_rmse_m": 0.00014596464472271489,
+        "rate_rmse_rad_s": 0.0002960212683192634,
+        "velocity_rmse_m_s": 0.0004254939212074516
+      },
+      "passed": true,
+      "points": {
+        "cases": 41,
+        "maximum_errors": {
+          "acceleration_error_m_s2": 2.981509794608428e-08,
+          "angular_acceleration_error_rad_s2": 4.1033842990145786e-12,
+          "equilibrium_error": 5.736078279028334e-12,
+          "scaled_load_error": 6.705307203939862e-13
+        },
+        "passed": true
+      },
+      "spec_sha256": "d2c7f4e14b8b226b99162f8afc0fd8e03ae46bc570466f64858eaa929d6f34c4",
+      "trim": {
+        "cascade_success": true,
+        "decision": [
+          9.912051996002656e-05,
+          0.02412329690900115,
+          -0.00015542276642282107,
+          0.48945322787539103,
+          0.006809758828399879,
+          0.09188962041240696
+        ],
+        "jsbsim_acceleration_m_s2": 2.9829261879977165e-08,
+        "jsbsim_angular_acceleration_rad_s2": 1.7652653501619463e-10,
+        "passed": true
+      }
+    }
+  },
+  "passed": true,
+  "profile": "full",
+  "protocol_sha256": "d07a1c1183451048485b28df9122a9f37b7767ca30d9ae77cad73df3be20c4c9",
+  "runtime": {
+    "backend": "cpu",
+    "cascade_version": "0.4.0rc1",
+    "git_commit": "342154e21f7fb5f8bdd29d0f769766878ce0aa6c",
+    "jax_version": "0.11.1",
+    "jaxlib_version": "0.11.1",
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.11",
+    "schema": "cascade_stamp_v1",
+    "seed": null,
+    "timestamp_utc": "2026-09-25T17:05:02+00:00",
+    "x64_enabled": true
+  },
+  "schema": "cascade_jsbsim_validation_record_v1",
+  "x8_approximation": {
+    "configuration": {
+      "airspeed_m_s": 18.0,
+      "alpha_deg": 3,
+      "central_rate_step_rad_s": 0.02,
+      "propellers": "stopped",
+      "separation": "equilibrium"
+    },
+    "derivatives": {
+      "coefficient": {
+        "CL_q": 3.870000000059785,
+        "CY_p": -0.13700000000211418,
+        "CY_r": 0.08390000000129474,
+        "Cl_p": -0.40400000000623454,
+        "Cl_r": 0.055500000000856475,
+        "Cm_q": -1.300000000020076,
+        "Cn_p": 0.004370000000067437,
+        "Cn_r": -0.012000000000185182
+      },
+      "panels": {
+        "CL_q": 2.7893149675687003,
+        "CY_p": 0.04319022196171554,
+        "CY_r": 0.07403401872949728,
+        "Cl_p": -0.2870972152054639,
+        "Cl_r": 0.03029758751015518,
+        "Cm_q": -2.58880429524782,
+        "Cn_p": -0.03190465667355904,
+        "Cn_r": -0.02420952886906701
+      }
+    },
+    "description": "Model approximation differences, not implementation failures or flight accuracy",
+    "opposite_signs": [
+      "CY_p",
+      "Cn_p"
+    ]
+  }
+}

@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased: cross-simulator verification
+
+- Add an optional, pinned JSBSim comparison harness with independently evaluated native
+  XML aircraft equations, frame/inertia checks, trim residuals, convergent maneuver
+  comparisons and held-out synthetic calibration for the X8 and reference airframes.
+- Preserve protocols, per-case discrepancies, trajectories, model/source hashes and
+  calibration records; execute the full installed-wheel campaign in a dedicated CI job.
+- Correct separation initialization for downwash-enabled aircraft by solving the coupled
+  equilibrium. Previously a reported trim could drift as its tail separation relaxed.
+  Zero-downwash initialization and packaged aircraft parameters are unchanged.
+
+These checks establish shared-model implementation agreement, not measured-flight accuracy.
+
 ## Unreleased: policy learning and aircraft calibration
 
 - Add bounded aircraft calibration from frozen fitting recordings, using shared differentiable

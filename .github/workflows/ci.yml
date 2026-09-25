@@ -243,6 +243,48 @@ jobs:
           path: ${{ env.EVIDENCE_DIR }}/
           retention-days: 30
 
+  cross-simulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      JAX_ENABLE_X64: "1"
+      JSBSIM_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v6
+        with:
+          name: cascade-distributions-${{ github.sha }}
+          path: release-artifacts
+      - name: Install the wheel with the pinned reference simulator
+        run: |
+          uv venv "$RUNNER_TEMP/cascade-jsbsim"
+          wheels=("$GITHUB_WORKSPACE"/release-artifacts/dist/*.whl)
+          uv pip install --python "$RUNNER_TEMP/cascade-jsbsim/bin/python" \
+            "${wheels[0]}[validation]" pytest
+      - name: Test frame adapters, load derivatives, and the full comparison campaign
+        run: |
+          mkdir -p "$RUNNER_TEMP/cascade-jsbsim-evidence"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/cascade-jsbsim/bin/python" -I -m pytest \
+            "$GITHUB_WORKSPACE/tests/test_jsbsim.py" \
+            "$GITHUB_WORKSPACE/tests/test_initialization.py" \
+            --junitxml="$RUNNER_TEMP/cascade-jsbsim-evidence/pytest.xml"
+          "$RUNNER_TEMP/cascade-jsbsim/bin/python" -I -m cascade.validation \
+            "$RUNNER_TEMP/cascade-jsbsim-evidence/campaign"
+      - name: Retain all cross-simulator cases, including failures
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cascade-evidence-jsbsim-${{ github.sha }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cascade-jsbsim-evidence/
+          retention-days: 30
+
   visualization:
     needs: build
     runs-on: ubuntu-latest
