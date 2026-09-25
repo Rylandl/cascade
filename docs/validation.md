@@ -45,6 +45,13 @@ autodiff. Release numerical checks add finite-difference gradient agreement and 
 convergence for both aerodynamic backends, in addition to representative dtype checks.
 Pass/fail results are recorded only after executing those checks.
 
+The [JSBSim comparison harness](jsbsim-validation.md) adds an independently executed
+implementation of the same aircraft equations, with force/acceleration checks, trim
+balance, timestep-converged maneuvers and calibration from JSBSim-generated recordings.
+It covers the X8 coefficient/panel models and the aerobatic/tailsitter software fixtures.
+Shared parameter data remains shared evidence; this does not replace measured-flight
+evaluation or validate the panel approximation's physical rate response.
+
 Controller, learning, and throughput examples are simulator experiments with declared seeds
 and configurations. Their results are not flight performance promises, population statistics,
 or GPU measurements. Performance depends on device, compiler, precision, batch size and
